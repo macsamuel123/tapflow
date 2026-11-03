@@ -32,11 +32,12 @@ flowchart LR
 
 ```
 restaurant_app/
-├─ Makefile  package.json (supabase CLI, concurrently)  .env.example  PLAN.md  CLAUDE.md  README.md
+├─ Makefile  package.json (supabase CLI, concurrently)  PLAN.md  CLAUDE.md  README.md
+│  (env templates live per app: api/.env.example, web/.env.example)
 ├─ docs/BRD.pdf
 ├─ supabase/
 │  ├─ config.toml
-│  ├─ migrations/  0001_schema.sql 0002_rls.sql 0003_realtime.sql 0004_functions.sql
+│  ├─ migrations/  2026110200000{1_schema,2_rls,3_realtime,4_functions}.sql  (timestamped, CLI convention)
 │  ├─ seed.sql                         # Demo Bistro (CAD, America/Vancouver), 5 tables, ~20 items
 │  └─ tests/rls_cross_tenant.test.sql  # pgTAP via `supabase test db`
 ├─ api/
@@ -69,7 +70,8 @@ Tables: `restaurants`, `staff_members`, `tables`, `menu_categories`, `menu_items
 | Detail | Why |
 |---|---|
 | `restaurants.currency` default `'CAD'`, `timezone` default `'America/Vancouver'`, `tax_rate_bps`, `platform_fee_bps` default 300 | Launch market is BC. Per-tenant overrides. |
-| `restaurant_id` on `modifier_groups` and `modifiers` (denormalized; a trigger checks it matches the parent) | RLS without joins; Realtime filter `restaurant_id=eq.X` |
+| `restaurant_id` on `modifier_groups` and `modifiers` (denormalized). **Composite FKs** `(parent_id, restaurant_id)` → `parent(id, restaurant_id)` on items→categories, groups→items, modifiers→groups, orders/sessions→tables. | RLS without joins; Realtime filter `restaurant_id=eq.X`. The DB rejects cross-tenant links outright (stronger and simpler than a trigger). |
+| `orders_status_guard` trigger | A second, DB-level enforcement of the status machine. It also stamps `*_at` timestamps. |
 | `sort_order` on categories, items, groups and modifiers; `updated_at` on mutable tables | Stable ordering; cache busting |
 | `staff_members` PK `(user_id, restaurant_id)`, role `owner \| kitchen` | A user can work at several restaurants. Servers use the `kitchen` role for MVP (a `server` role can be added later). |
 | `order_status` enum: `pending_payment \| paid \| accepted \| ready \| delivered \| cancelled` | Delivery workflow |
@@ -83,8 +85,10 @@ Tables: `restaurants`, `staff_members`, `tables`, `menu_categories`, `menu_items
 **RLS summary.** RLS is enabled on every table.
 - `anon`: SELECT on `menu_categories`, `menu_items`, `modifier_groups` and `modifiers` only.
 - Staff (`authenticated`): SELECT on their restaurants' rows via `app.is_staff_of(restaurant_id)`. Orders are visible to staff only when `status <> 'pending_payment'` (tickets only after payment, enforced at the DB layer).
-- Owner-only: `tables` (minus `qr_secret`) and `staff_members` management.
-- `table_sessions`, `cart_items`, `stripe_events`, `ticket_counters`: no client policies (API only).
+- `tables`: staff can read labels (tickets need them). `qr_secret` is excluded by column grants. Writes (create, rotate) are owner-only, via the API.
+- `staff_members`: your own rows, or every row of a restaurant you own.
+- Clients get **no INSERT/UPDATE/DELETE grants on any table**. All writes go through the API.
+- `table_sessions`, `cart_items`, `stripe_events`, `ticket_counters`: no client grants or policies (API only).
 
 ## 4. Key flows and decisions
 

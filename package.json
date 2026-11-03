@@ -1,0 +1,16 @@
+{
+  "name": "restaurant-app",
+  "private": true,
+  "description": "Root tooling: Supabase CLI + dev process runner. App code lives in web/ and api/.",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "supabase": "supabase"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "supabase": "^2.20.0"
+  }
+}
