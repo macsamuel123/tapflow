@@ -14,7 +14,7 @@ The repo lives in WSL2 at `~/code/restaurant_app`. Run all commands from there.
 |---|---|
 | `make install` | pnpm install (root + web) and `uv sync` (api) |
 | `make dev` | `supabase start` + API (uvicorn :8000) + web (next :3000) |
-| `make stop` | `supabase stop` |
+| `make stop` | Kill API + web dev servers, then `supabase stop` |
 | `make seed` | `supabase db reset` (re-applies migrations + seed.sql) |
 | `make test` | `test-api` (pytest) + `test-db` (pgTAP via `supabase test db`) |
 | `make lint` | ruff, mypy --strict, eslint, `tsc --noEmit` |

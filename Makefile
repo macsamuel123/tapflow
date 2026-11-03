@@ -19,7 +19,8 @@ dev: ## Start local Supabase, then API (:8000) + web (:3000)
 		"cd api && uv run uvicorn app.main:app --reload --port 8000" \
 		"pnpm --dir web dev"
 
-stop: ## Stop local Supabase
+stop: ## Stop API + web dev servers, then local Supabase
+	./scripts/stop-dev.sh
 	$(SUPABASE) stop
 
 seed: ## Reset local DB: re-apply migrations + seed.sql
