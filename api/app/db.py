@@ -8,7 +8,8 @@ from psycopg import AsyncConnection
 from psycopg.rows import TupleRow
 from psycopg_pool import AsyncConnectionPool
 
-type Pool = AsyncConnectionPool[AsyncConnection[TupleRow]]
+type Conn = AsyncConnection[TupleRow]
+type Pool = AsyncConnectionPool[Conn]
 type DbPing = Callable[[], Awaitable[bool]]
 
 PING_TIMEOUT_SECONDS = 2.0
@@ -33,7 +34,8 @@ def get_pool(request: Request) -> Pool:
 
 async def get_conn(
     pool: Annotated[Pool, Depends(get_pool)],
-) -> AsyncIterator[AsyncConnection[TupleRow]]:
+) -> AsyncIterator[Conn]:
+    # Commits when the request succeeds, rolls back if it raises.
     async with pool.connection() as conn:
         yield conn
 

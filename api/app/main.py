@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import Settings, get_settings
 from app.db import create_pool
-from app.routers import health
+from app.routers import cart, health, menu, sessions
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -33,6 +33,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Session-Token"],
     )
     app.include_router(health.router)
+    app.include_router(sessions.router)
+    app.include_router(menu.router)
+    app.include_router(cart.router)
     return app
 
 
