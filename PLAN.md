@@ -176,7 +176,8 @@ Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `
 | Apple Pay / Google Pay | Need a registered HTTPS domain, so use `make tunnel` (M3). Cards work everywhere. |
 | FCP < 1.0s, bundle < 1.2MB (FR-1.2) | Targeted; Lighthouse in M4. |
 | Audio alert reliability > 99.9% | Best effort (autoplay gate, wake lock, polling fallback). |
-| Geolocation fraud check, POS/printer, admin dashboard | Out of scope. |
+| Geolocation fraud check, POS/printer | Out of scope. |
+| Platform admin dashboard | In scope as M5 (see §11). |
 | Tips | In M3: tip selection at checkout (`tip_cents`, untaxed, included in the PaymentIntent). Default 0. |
 | Offline PWA | Manifest only. |
 | Item 86'd between checkout and payment | Payment succeeds and the ticket shows a warning badge. Fulfillment cancels it and refunds via the Stripe Dashboard. |
@@ -230,8 +231,9 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | M0 | PLAN.md, CLAUDE.md | Committed ✅ |
 | M1 | Foundation: scaffold, migrations + RLS + seed, FastAPI health, `.env.example`, Makefile | `make dev` runs web + api + Supabase; RLS cross-tenant test passes |
 | M2 | Scan / menu / cart: QR tokens, sessions, menu page, modifier picker, server-priced cart | pytest covers tokens, modifier rules, pricing math |
-| M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright: scan → pay → accept → ready → delivered |
-| M4 | Owner dashboard + polish: menu CRUD + CSV, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
+| M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
+| M4 | Owner dashboard + polish: menu CRUD + CSV, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script, deployment target decided | Lint, tests and Lighthouse reported |
+| M5 | Admin & Ops: `/admin` panel, tagged Playwright suites, `tests.yml` nightly and on demand, `/admin/ops` with run buttons, failure alerts, manual release checklist, staging smoke test (see §11) | A failing nightly run sends an alert and appears on `/admin/ops` with its report; each suite runs alone from a Run button |
 
 After each milestone: what was built, how to run and test it, what's stubbed, what's next, with lint and test summaries.
 
@@ -266,3 +268,42 @@ The design is kept here so it can be added without rework.
 - **Pickup mode:** a venue-side fulfillment option with no touchpoint. The order carries a pickup name or number instead of a touchpoint label. It reuses the same status machine and the same `paid`-only ticket rule.
 - **Station routing:** route each order item to a station (bar vs kitchen, or other) so each station's KDS shows only its items. Ticket status stays per order, with per-station acknowledgement.
 - **Multi-vendor split checkout:** one diner payment that splits across several vendors or venues. Destination charges per vendor, each with its own `application_fee_amount` and tax breakdown.
+
+## 11. M5: Admin & Ops
+
+Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read through the user's own session, so RLS applies. Writes go through the API, which verifies the JWT and checks `platform_admins`.
+
+**a. `/admin` panel**
+- Venues list with Stripe status.
+- Today's orders, revenue and platform fees. "Today" uses each venue's timezone, and revenue is grouped by currency.
+- Suspend or reactivate a venue with `venues.suspended_at`. While suspended, diners can browse, but new carts and checkout are refused. Paid orders and webhooks still finish.
+- Order lookup for support, including `pending_payment` orders.
+
+**b. Playwright suites** (each can run alone; screenshots and video on failure)
+
+| Tag | Covers |
+|---|---|
+| `@full` | Every suite |
+| `@order-flow` | Scan → pay with a Stripe test card → accept → ready → delivered |
+| `@fulfillment` | Alarm, accept, 86 toggle |
+| `@security` | Forged QR, sold-out item, browse-only checkout blocked |
+| `@mobile` | Phone viewport |
+
+**c. `.github/workflows/tests.yml`**
+- Runs nightly (`schedule`) and on demand (`workflow_dispatch` with a `suite` input). Both only work once the file is on `main`.
+- Starts Supabase, API and web in CI, then runs lint, pytest, pgTAP and the chosen Playwright suite. It uploads the Playwright report as an artifact, kept for 7 days.
+- Stripe tests need test keys in GitHub secrets and `stripe listen` in CI.
+
+**d. `/admin/ops`**
+- One **Run** button per suite. The API triggers the workflow with a server-side GitHub token limited to Actions on this repo. The token never reaches the browser, and only one API module talks to GitHub.
+- Recent runs with status, duration, a report link, and failure screenshots and video, stored in `ops_test_runs`.
+- CI can't reach a local API, so the API pulls run results from GitHub. That works before and after deployment.
+- Failure media needs a repo login on GitHub. Until staging exists, the page links to the run. After that, CI uploads it to a private storage bucket so it shows on the page.
+
+**e. Alerts.** Email through Resend when a nightly or manual run fails, with phone push later. A final workflow job sends it, so it works with no deployed server. Recipients come from a repo secret until staging exists, then from `platform_admins`.
+
+**f. Manual release checklist** on `/admin/ops`, for what Playwright can't cover: real-phone Apple Pay and Google Pay, alarm audibility in a real venue, look on a physical iPhone and Android, staff usability. Admins tick items with notes per release, stored in `ops_checklist_runs`. Item definitions live in code, so changes get reviewed.
+
+**g. Staging smoke test.** After deployment (target decided in M4), a synthetic `@order-flow` runs against staging on the nightly schedule. It uses Stripe test mode and a dedicated test venue, so real numbers stay clean.
+
+**Needed when M5 starts:** a Resend account and key, Stripe test keys in GitHub secrets, and the GitHub token. `ops_test_runs` and `ops_checklist_runs` get read-only platform admin RLS and no client writes.

@@ -34,7 +34,7 @@ Run `make lint` and `make test` before calling a milestone done, and report the 
 - Seed and defaults: CAD, `America/Vancouver`. Taxes: GST 500 bps, PST 1000 bps. Food → GST; Alcohol → GST + PST.
 - Tax: each menu item has a tax category, which maps to a set of taxes. Each tax is rounded half-up on its own taxable base, then summed. Tax is never applied to tax. Never a single venue-wide rate.
 - Small, reviewable commits per milestone. Never commit secrets: `.env*` is gitignored except `.env.example`.
-- Out of scope: AI waiter/judge (Phase 2), voice, vision ingestion, geolocation, POS/printer, admin dashboard. Tips land in M3 (tip_cents, untaxed).
+- Out of scope: AI waiter/judge (Phase 2), voice, vision ingestion, geolocation, POS/printer. The platform admin panel is M5 (PLAN.md §11). Tips land in M3 (tip_cents, untaxed).
 
 ## Non-negotiable invariants (MVP, enforced in code AND tested)
 1. **Zero financial trust in clients.** Clients send only `item_id`, `modifier_ids`, `quantity`, `notes`. The API computes every amount from DB prices in integer cents. Order items snapshot names and prices at purchase time.
