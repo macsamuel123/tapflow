@@ -24,7 +24,7 @@ flowchart LR
 ```
 
 - **Diners** never write to Supabase directly. They get menus from the API. Anon Realtime is SELECT-only on the menu touchpoints, so 86 updates arrive live. Order status reaches the diner through an API-sent Realtime **Broadcast** on `order:{order_id}`, with payload **`{status, ticket_number}` only**. A GET-endpoint poll is the fallback. Anon can never read `orders`.
-- **Staff** (owner, manager, fulfillment, runner) and **platform admins** sign in with a Supabase magic link. The KDS and runner views subscribe to `orders` via `postgres_changes`, and RLS decides what each user can see. Every write (status changes, 86, CRUD) goes through the API. The API verifies the Supabase JWT and checks `staff_members` membership before writing.
+- **Staff** (owner, manager, fulfillment, runner) and **platform admins** sign in with Supabase Auth, email and password (M3 moves this from the magic link the seed was built for). The KDS and runner views subscribe to `orders` via `postgres_changes`, and RLS decides what each user can see. Every write (status changes, 86, CRUD) goes through the API. The API verifies the Supabase JWT and checks `staff_members` membership before writing.
 - **API DB access:** psycopg 3 async pool, hand-written SQL in `repositories/`, Pydantic v2 at every boundary.
 - **Next.js rewrites** `/api/*` → FastAPI, so the browser sees one origin and a single tunnel covers both.
 
@@ -231,8 +231,9 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | M0 | PLAN.md, CLAUDE.md | Committed ✅ |
 | M1 | Foundation: scaffold, migrations + RLS + seed, FastAPI health, `.env.example`, Makefile | `make dev` runs web + api + Supabase; RLS cross-tenant test passes |
 | M2 | Scan / menu / cart: QR tokens, sessions, menu page, modifier picker, server-priced cart | pytest covers tokens, modifier rules, pricing math |
-| M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
-| M4 | Owner dashboard + polish: menu CRUD + CSV, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script, deployment target decided | Lint, tests and Lighthouse reported |
+| S0 | SaaS scaffold on `saas-scaffold`: marketing site, sign-up with service setup, printable QR codes and venue dashboard, as a clickable mock with `NEXT_PUBLIC_DEMO_MODE=true` (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px, branch ready for a Vercel preview |
+| M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, pickup (see §12), tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
+| M4 | Owner dashboard + polish: menu CRUD + CSV, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
 | M5 | Admin & Ops: `/admin` panel, tagged Playwright suites, `tests.yml` nightly and on demand, `/admin/ops` with run buttons, failure alerts, manual release checklist, staging smoke test (see §11) | A failing nightly run sends an alert and appears on `/admin/ops` with its report; each suite runs alone from a Run button |
 
 After each milestone: what was built, how to run and test it, what's stubbed, what's next, with lint and test summaries.
@@ -265,7 +266,6 @@ The design is kept here so it can be added without rework.
 **BRD gap to note then:** a "sub-200ms" judge isn't realistic for a second LLM round trip (~400–1000ms). Latency will be measured.
 
 **Other Phase 2 notes (not MVP):**
-- **Pickup mode:** a venue-side fulfillment option with no touchpoint. The order carries a pickup name or number instead of a touchpoint label. It reuses the same status machine and the same `paid`-only ticket rule.
 - **Station routing:** route each order item to a station (bar vs kitchen, or other) so each station's KDS shows only its items. Ticket status stays per order, with per-station acknowledgement.
 - **Multi-vendor split checkout:** one diner payment that splits across several vendors or venues. Destination charges per vendor, each with its own `application_fee_amount` and tax breakdown.
 
@@ -304,6 +304,24 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 
 **f. Manual release checklist** on `/admin/ops`, for what Playwright can't cover: real-phone Apple Pay and Google Pay, alarm audibility in a real venue, look on a physical iPhone and Android, staff usability. Admins tick items with notes per release, stored in `ops_checklist_runs`. Item definitions live in code, so changes get reviewed.
 
-**g. Staging smoke test.** After deployment (target decided in M4), a synthetic `@order-flow` runs against staging on the nightly schedule. It uses Stripe test mode and a dedicated test venue, so real numbers stay clean.
+**g. Staging smoke test.** After deployment, a synthetic `@order-flow` runs against staging on the nightly schedule. It uses Stripe test mode and a dedicated test venue, so real numbers stay clean.
 
 **Needed when M5 starts:** a Resend account and key, Stripe test keys in GitHub secrets, and the GitHub token. `ops_test_runs` and `ops_checklist_runs` get read-only platform admin RLS and no client writes.
+
+## 12. S0: SaaS scaffold, and pickup in the MVP
+
+**Hosting and auth.** Web on Vercel, API on Render, Supabase Cloud for the database and auth. Staff and owners sign in with email and password. S0 mocks all of this; real auth and API calls replace the mocks page by page.
+
+**S0 structure.** Pages call typed interfaces in `web/src/services/`. With `NEXT_PUBLIC_DEMO_MODE=true` those are implemented by `web/src/mocks/`, with no network calls to the API. Without it, the sign-up and dashboard pages show a "not live yet" screen. In demo mode the `/api/*` rewrite is off, and `/v/*` redirects to a page explaining what a guest will see, because no API is deployed.
+
+**Pickup moves from Phase 2 into the MVP.** A venue can have delivery touchpoints, pickup touchpoints, or both. A pickup point is a touchpoint with its own QR.
+- The guest at a pickup QR enters their first name at checkout and gets a pickup number from a daily counter.
+- The fulfillment screen and guest status show "Ready — #14 · Amara, collect at Pickup counter". Staff tap **Picked up**.
+- Delivery orders: `paid → accepted → ready → delivered`. Pickup orders: `paid → accepted → ready → picked_up`.
+
+**To build in M3** (mocked only in S0):
+- `touchpoints.service_mode` = `delivery | pickup`, `orders.guest_name`, and order status `picked_up`, valid only from `ready` on a pickup order.
+- The pickup number reuses `ticket_number` and `ticket_counters`.
+- `guest_name` is a new client-sent field, required only at pickup touchpoints and validated by the API. Invariant 1 needs a non-financial exception for it, and invariant 4 needs the new transition.
+- `app.can_read_order`: runners don't see `ready` pickup orders. Fulfillment's "closed today" rule includes `picked_up`.
+- Tests: pgTAP for the status guard and role visibility, API tests for checkout, Playwright for the pickup path.
