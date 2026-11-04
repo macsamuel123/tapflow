@@ -233,6 +233,7 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | M2 | Scan / menu / cart: QR tokens, sessions, menu page, modifier picker, server-priced cart | pytest covers tokens, modifier rules, pricing math |
 | S0 | SaaS scaffold on `saas-scaffold`: marketing site, sign-up with service setup, printable QR codes and venue dashboard, as a clickable mock with `NEXT_PUBLIC_DEMO_MODE=true` (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px, branch ready for a Vercel preview |
 | S0.1 | Menu builder on the mock: sign-up step 5, categories, items, photos, options, allergens and CSV import (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px |
+| S0.2 | Guest experience on the mock: scan, menu, cart, mock order and order status (see §12) | Lint clean, `make test` passes, Playwright `@saas`, a demo QR completes an order in a fresh browser |
 | M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, pickup (see §12), tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
 | M4 | Owner dashboard + polish: wire the S0.1 menu builder to the API, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
 | M5 | Admin & Ops: `/admin` panel, tagged Playwright suites, `tests.yml` nightly and on demand, `/admin/ops` with run buttons, failure alerts, manual release checklist, staging smoke test (see §11) | A failing nightly run sends an alert and appears on `/admin/ops` with its report; each suite runs alone from a Run button |
@@ -335,3 +336,7 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 - Allergens are on the item form, the item card and the CSV, and the mock stores the database codes (`menu_items.allergens`). Owners must declare them: tick allergens or "No listed allergens", and use `none` in the CSV. A blank or missing value is rejected.
 - `menu_items.allergens` defaults to `{}`, so the database can't tell "none" from "not answered". The real API must require the choice, and M4 should add a way to record it, such as a `allergens_declared` column.
 - `ingredients` and `dietary_tags` are still deferred.
+
+**S0.2 guest experience** (mock only). In demo mode `/v/{slug}/p/{id}?token=` redirects to `/demo/v/...`, and no `/v` page changes. Demo Brewery and Demo Food Truck have fixed slugs, touchpoint ids and `demo` tokens, and their menus load from code, so a printed demo QR works in any browser. The tester's own venue stays in one browser. Cross-device tracking waits for Supabase Realtime: the demo updates within one browser, and a "simulate" toggle stands in for staff.
+
+`web/src/lib/pricing.ts` is the TypeScript twin of `domain/pricing.py`, and both run `testdata/pricing-cases.json`. It's for demo mode only: in the live product every amount still comes from the API (invariant 1).

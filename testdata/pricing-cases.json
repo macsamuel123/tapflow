@@ -1,0 +1,20 @@
+{
+  "taxes": {
+    "GST": { "name": "Goods and Services Tax", "rate_bps": 500 },
+    "PST": { "name": "Provincial Sales Tax", "rate_bps": 1000 }
+  },
+  "cases": [
+    { "name": "empty cart", "fee_bps": 300, "lines": [], "subtotal": 0, "tax": 0, "fee": 0, "total": 0, "tax_lines": [] },
+    { "name": "food pays GST only", "fee_bps": 300, "lines": [[1000, ["GST"]]], "subtotal": 1000, "tax": 50, "fee": 30, "total": 1050, "tax_lines": [["GST", 1000, 50]] },
+    { "name": "alcohol pays both on the pre-tax price", "fee_bps": 300, "lines": [[1000, ["GST", "PST"]]], "subtotal": 1000, "tax": 150, "fee": 30, "total": 1150, "tax_lines": [["GST", 1000, 50], ["PST", 1000, 100]] },
+    { "name": "half rounds up", "fee_bps": 300, "lines": [[1090, ["GST"]]], "subtotal": 1090, "tax": 55, "fee": 33, "total": 1145, "tax_lines": [["GST", 1090, 55]] },
+    { "name": "rounded on the base, not per line", "fee_bps": 300, "lines": [[1010, ["GST"]], [1010, ["GST"]]], "subtotal": 2020, "tax": 101, "fee": 61, "total": 2121, "tax_lines": [["GST", 2020, 101]] },
+    { "name": "each tax rounds alone, not a flat 15%", "fee_bps": 300, "lines": [[15, ["GST", "PST"]]], "subtotal": 15, "tax": 3, "fee": 0, "total": 18, "tax_lines": [["GST", 15, 1], ["PST", 15, 2]] },
+    { "name": "mixed cart", "fee_bps": 300, "lines": [[1500, ["GST"]], [1250, ["GST"]], [1300, ["GST", "PST"]]], "subtotal": 4050, "tax": 333, "fee": 122, "total": 4383, "tax_lines": [["GST", 4050, 203], ["PST", 1300, 130]] },
+    { "name": "order of lines and taxes doesn't matter", "fee_bps": 0, "lines": [[100, ["PST", "GST"]], [100, ["GST"]]], "subtotal": 200, "tax": 20, "fee": 0, "total": 220, "tax_lines": [["GST", 200, 10], ["PST", 100, 10]] },
+    { "name": "zero-amount line shows no tax", "fee_bps": 300, "lines": [[0, ["GST", "PST"]], [100, ["GST"]]], "subtotal": 100, "tax": 5, "fee": 3, "total": 105, "tax_lines": [["GST", 100, 5]] },
+    { "name": "tax-exempt line", "fee_bps": 300, "lines": [[1234, []]], "subtotal": 1234, "tax": 0, "fee": 37, "total": 1234, "tax_lines": [] },
+    { "name": "tip is added and never taxed", "fee_bps": 300, "tip": 200, "lines": [[1000, ["GST"]]], "subtotal": 1000, "tax": 50, "fee": 30, "total": 1250, "tax_lines": [["GST", 1000, 50]] },
+    { "name": "largest price, 20 of them", "fee_bps": 300, "lines": [[20000000, ["GST", "PST"]]], "subtotal": 20000000, "tax": 3000000, "fee": 600000, "total": 23000000, "tax_lines": [["GST", 20000000, 1000000], ["PST", 20000000, 2000000]] }
+  ]
+}

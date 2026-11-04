@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { QrCode } from "@/components/qr/QrCode";
 import { Button, Card, FormError, Pill, TextField } from "@/components/ui";
+import { LOCAL_VENUE_NOTE } from "@/lib/demo";
 import { DEFAULT_PICKUP_NAME } from "@/lib/industries";
 import { downloadQrPdf } from "@/lib/qr/pdf";
 import { touchpointUrl } from "@/lib/qr/url";
@@ -13,8 +14,12 @@ import { getServices, type Touchpoint } from "@/services";
 
 async function load() {
   const { touchpoints } = getServices();
-  const [list, setup] = await Promise.all([touchpoints.list(), touchpoints.getSetup()]);
-  return { list, spotType: setup.spotType };
+  const [list, setup, localOnly] = await Promise.all([
+    touchpoints.list(),
+    touchpoints.getSetup(),
+    getServices().venues.isLocalOnly(),
+  ]);
+  return { list, spotType: setup.spotType, localOnly };
 }
 
 export default function TouchpointsPage() {
@@ -28,7 +33,7 @@ export default function TouchpointsPage() {
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   if (!data) return <FormError message={error} />;
-  const { list, spotType } = data;
+  const { list, spotType, localOnly } = data;
   const services = getServices().touchpoints;
   const spots = list.filter((t) => t.serviceMode === "delivery");
   const pickups = list.filter((t) => t.serviceMode === "pickup");
@@ -117,6 +122,9 @@ export default function TouchpointsPage() {
         <h1 className="text-2xl font-black text-ink">Touchpoints & QR</h1>
         <p className="text-gray-600">{active.length} active {active.length === 1 ? "code" : "codes"}. Each one opens your menu at that spot.</p>
         <Button onClick={() => void download()} className="w-full sm:w-auto">Download printable PDF</Button>
+        {localOnly ? (
+          <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
+        ) : null}
       </div>
       <FormError message={error ?? pdfError} />
       <p role="status" className="text-sm font-medium text-brand-800">{notice}</p>

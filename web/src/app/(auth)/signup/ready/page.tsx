@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { QrCode } from "@/components/qr/QrCode";
 import { Button, FormError, LinkButton } from "@/components/ui";
+import { LOCAL_VENUE_NOTE } from "@/lib/demo";
 import { downloadQrPdf } from "@/lib/qr/pdf";
 import { touchpointUrl } from "@/lib/qr/url";
 import { getServices, type Touchpoint, type Venue } from "@/services";
@@ -62,6 +63,7 @@ export default function QrReadyPage() {
         ))}
       </ul>
       {extra > 0 ? <p className="text-sm text-gray-600">Plus {extra} more on the sheet.</p> : null}
+      <p role="note" className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
       <FormError message={error} />
       <div className="grid gap-2">
         <Button onClick={() => void download()} disabled={busy}>

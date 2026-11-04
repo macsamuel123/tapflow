@@ -59,8 +59,12 @@ export function OrderCard({
         <Pill tone={status.tone}>{status.label}</Pill>
       </div>
       <ul className="mt-2 text-sm text-gray-700">
-        {order.lines.map((line) => (
-          <li key={line.name}>{line.quantity} x {line.name}</li>
+        {order.lines.map((line, i) => (
+          <li key={i}>
+            {line.quantity} x {line.name}
+            {line.options.length ? ` (${line.options.join(", ")})` : ""}
+            {line.notes ? <span className="block text-xs text-gray-500">Note: {line.notes}</span> : null}
+          </li>
         ))}
       </ul>
       {reached >= 0 ? (

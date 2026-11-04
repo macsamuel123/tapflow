@@ -24,6 +24,16 @@ export type Workspace = {
   taxes: TaxRate[];
   /** True until the sample menu is cleared, so the button stays available after edits. */
   sampleMenu: boolean;
+  /** One cart per touchpoint. Lines hold choices only: every amount is worked out on read. */
+  carts: Record<string, StoredCartLine[]>;
+};
+
+export type StoredCartLine = {
+  id: string;
+  itemId: string;
+  optionIds: string[];
+  quantity: number;
+  notes: string;
 };
 
 export type DemoState = {
@@ -33,7 +43,7 @@ export type DemoState = {
 };
 
 // Passwords are never kept. Bump the version when the shape of the state changes.
-const STORAGE_KEY = "tapflow:demo:v4";
+const STORAGE_KEY = "tapflow:demo:v5";
 
 function freshWorkspaces(): Workspace[] {
   return [demoBrewery(), demoFoodTruck()];

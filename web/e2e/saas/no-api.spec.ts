@@ -64,9 +64,3 @@ test("@saas /api is not routed in demo mode", async ({ request }) => {
   const res = await request.get("/api/health");
   expect(res.status()).toBe(404);
 });
-
-test("@saas a scanned demo QR lands on the explanation page", async ({ page }) => {
-  await page.goto("/v/demo-brewery/p/c0000000-0000-4000-8000-000000000001?token=demo");
-  await expect(page).toHaveURL(/\/demo\/scan/);
-  await expect(page.getByRole("heading", { name: "Your QR code works" })).toBeVisible();
-});

@@ -2,6 +2,8 @@
 // interface, so a mock can be replaced by Supabase Auth or the API one namespace at a time.
 // Money is integer cents.
 
+import type { AddCartItem, Cart, Menu } from "@/lib/api-types";
+
 export type IndustryId =
   | "restaurants"
   | "breweries"
@@ -46,7 +48,13 @@ export type Touchpoint = {
   token: string;
 };
 
-export type OrderLine = { name: string; quantity: number; unitPriceCents: number };
+export type OrderLine = {
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+  options: string[];
+  notes: string;
+};
 
 export type Order = {
   id: string;
@@ -167,6 +175,8 @@ export interface AuthService {
 }
 
 export interface VenueService {
+  /** True for a venue that exists only in this browser. */
+  isLocalOnly(): Promise<boolean>;
   listWorkspaces(): Promise<WorkspaceSummary[]>;
   current(): Promise<Venue>;
   switchTo(workspaceId: string): Promise<void>;
@@ -222,7 +232,51 @@ export interface PaymentService {
   disconnect(): Promise<void>;
 }
 
+/** Everything a guest request carries. The token is re-checked every time, so regenerating a
+ *  QR stops an already-open page from ordering. */
+export type GuestContext = { slug: string; touchpointId: string; token: string | null };
+
+export type GuestAccess = "verified" | "no-token" | "bad-token" | "inactive";
+
+export type GuestVenue = {
+  menu: Menu;
+  touchpointLabel: string;
+  serviceMode: ServiceMode;
+  access: GuestAccess;
+  /** Only in this browser: the tester's own venue, not a fixed demo venue. */
+  localOnly: boolean;
+};
+
+export type GuestOrder = {
+  id: string;
+  venueName: string;
+  currency: string;
+  ticketNumber: number;
+  serviceMode: ServiceMode;
+  touchpointLabel: string;
+  guestName: string | null;
+  status: OrderStatus;
+  lines: OrderLine[];
+  subtotalCents: number;
+  taxCents: number;
+  totalCents: number;
+};
+
+export interface GuestService {
+  /** Null when this browser doesn't know the venue or touchpoint. */
+  open(context: GuestContext): Promise<GuestVenue | null>;
+  getCart(context: GuestContext): Promise<Cart>;
+  addItem(context: GuestContext, line: AddCartItem): Promise<Cart>;
+  updateLine(context: GuestContext, lineId: string, quantity: number): Promise<Cart>;
+  removeLine(context: GuestContext, lineId: string): Promise<Cart>;
+  placeOrder(context: GuestContext, guestName: string | null): Promise<string>;
+  getOrder(slug: string, orderId: string): Promise<GuestOrder | null>;
+  /** Demo only: stands in for staff and moves the order on one step. */
+  simulateNextStep(slug: string, orderId: string): Promise<void>;
+}
+
 export interface Services {
+  guest: GuestService;
   auth: AuthService;
   venues: VenueService;
   touchpoints: TouchpointService;

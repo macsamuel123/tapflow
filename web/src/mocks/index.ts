@@ -5,14 +5,14 @@ import { ServiceError } from "@/services/types";
 import type {
   ImportResult,
   MenuItem,
-  OrderStatus,
   ServiceSetup,
   Services,
   Session,
   Touchpoint,
 } from "@/services/types";
+import { allowedSteps, guestService, withPhotoUrls } from "./guest";
 import { applyImport, ensureCategory, findCategory } from "./menu-ops";
-import { clearPhotos, deletePhoto, photoUrl, savePhoto } from "./photos";
+import { clearPhotos, deletePhoto, savePhoto } from "./photos";
 import { makePickup, makeSpot, slugify, workspaceFromSignUp, YOUR_VENUE_ID } from "./fixtures";
 import {
   activeWorkspace,
@@ -22,12 +22,6 @@ import {
   updateActive,
   type Workspace,
 } from "./store";
-
-const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus[]>> = {
-  paid: ["accepted", "cancelled"],
-  accepted: ["ready", "cancelled"],
-  ready: ["delivered", "picked_up"],
-};
 
 function findItem(workspace: Workspace, id: string): MenuItem | undefined {
   return workspace.menu.flatMap((c) => c.items).find((i) => i.id === id);
@@ -131,6 +125,7 @@ function applyPickup(workspace: Workspace, setup: ServiceSetup): void {
 }
 
 export const mockServices: Services = {
+  guest: guestService,
   auth: {
     async getSession() {
       return readState().session;
@@ -176,6 +171,9 @@ export const mockServices: Services = {
   },
 
   venues: {
+    async isLocalOnly() {
+      return current().id === YOUR_VENUE_ID;
+    },
     async listWorkspaces() {
       const state = readState();
       const activeId = activeWorkspace(state).id;
@@ -278,11 +276,7 @@ export const mockServices: Services = {
       updateActive((workspace) => {
         const order = workspace.orders.find((o) => o.id === id);
         if (!order) throw new ServiceError("That order no longer exists.");
-        const closed = order.serviceMode === "pickup" ? "picked_up" : "delivered";
-        const allowed = (NEXT_STATUS[order.status] ?? []).filter(
-          (s) => (s !== "delivered" && s !== "picked_up") || s === closed,
-        );
-        if (!allowed.includes(status)) throw new ServiceError("That step isn't available.");
+        if (!allowedSteps(order).includes(status)) throw new ServiceError("That step isn't available.");
         order.status = status;
       });
     },
@@ -290,14 +284,7 @@ export const mockServices: Services = {
 
   menu: {
     async list() {
-      return Promise.all(
-        current().menu.map(async (category) => ({
-          ...category,
-          items: await Promise.all(
-            category.items.map(async (item) => ({ ...item, photoUrl: await photoUrl(item.photoUrl) })),
-          ),
-        })),
-      );
+      return withPhotoUrls(current().menu);
     },
     async isSample() {
       return current().sampleMenu;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import type { Cart } from "@/lib/api-types";
 import { formatCents } from "@/lib/money";
 
@@ -11,6 +11,8 @@ type Props = {
   onClose: () => void;
   onQuantity: (lineId: string, quantity: number) => void;
   onRemove: (lineId: string) => void;
+  /** Replaces the disabled button once a checkout exists. Left out on the /v guest page. */
+  checkout?: ReactNode;
 };
 
 function taxLabel(code: string, bps: number): string {
@@ -20,7 +22,7 @@ function taxLabel(code: string, bps: number): string {
   return `${code} ${whole}${frac ? `.${frac}` : ""}%`;
 }
 
-export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: Props) {
+export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove, checkout }: Props) {
   const c = cart.currency;
 
   useEffect(() => {
@@ -124,7 +126,9 @@ export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: 
             <span className="tabular-nums">{formatCents(cart.total_cents, c)}</span>
           </div>
 
-          {cart.verified ? (
+          {cart.verified && checkout ? (
+            checkout
+          ) : cart.verified ? (
             <>
               <button
                 type="button"

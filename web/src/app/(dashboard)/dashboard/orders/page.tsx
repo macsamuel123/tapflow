@@ -5,6 +5,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { OrderCard } from "@/components/dashboard/OrderCard";
 import { FormError } from "@/components/ui";
 import { useData } from "@/lib/use-data";
+import { useLive } from "@/lib/use-live";
 import { getServices, type ServiceMode } from "@/services";
 
 type Filter = "all" | ServiceMode;
@@ -17,7 +18,8 @@ const FILTERS: { value: Filter; label: string }[] = [
 
 export default function OrdersPage() {
   const { venue } = useDashboard();
-  const { data, error, run } = useData(() => getServices().orders.list());
+  const { data, error, reload, run } = useData(() => getServices().orders.list());
+  useLive(() => void reload()); // guest orders from another tab appear on their own
   const [filter, setFilter] = useState<Filter>("all");
   const hasBoth = new Set(data?.map((o) => o.serviceMode)).size > 1;
   const shown = data?.filter((o) => filter === "all" || o.serviceMode === filter) ?? [];

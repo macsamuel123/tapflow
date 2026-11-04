@@ -1,4 +1,5 @@
 import { DEFAULT_PICKUP_NAME } from "@/lib/industries";
+import { quote } from "@/lib/pricing";
 import { spotName } from "@/lib/service-setup";
 import type {
   CountryCode,
@@ -44,9 +45,34 @@ export function slugify(name: string): string {
   return slug.length >= 2 ? slug : "venue";
 }
 
-export function makeSpot(type: ServiceSetup["spotType"], number: number): Touchpoint {
+/** A fixed id, the same in every browser, so a printed demo QR works on any phone. */
+function fixedId(prefix: string, n: number): string {
+  return `${prefix}-0000-4000-8000-${String(n).padStart(12, "0")}`;
+}
+
+const BREWERY_TOUCHPOINTS = "d0000b01";
+const TRUCK_TOUCHPOINTS = "d0000f01";
+const PICKUP_NUMBER = 101;
+
+function withFixedIds(menu: MenuCategory[], prefix: string): MenuCategory[] {
+  let n = 0;
+  const next = () => fixedId(prefix, (n += 1));
+  for (const category of menu) {
+    category.id = next();
+    for (const menuItem of category.items) {
+      menuItem.id = next();
+      for (const group of menuItem.optionGroups) {
+        group.id = next();
+        for (const option of group.options) option.id = next();
+      }
+    }
+  }
+  return menu;
+}
+
+export function makeSpot(type: ServiceSetup["spotType"], number: number, fixed?: string): Touchpoint {
   return {
-    id: id(),
+    id: fixed ?? id(),
     label: spotName(type, number),
     serviceMode: "delivery",
     spotNumber: number,
@@ -55,8 +81,8 @@ export function makeSpot(type: ServiceSetup["spotType"], number: number): Touchp
   };
 }
 
-export function makePickup(name: string): Touchpoint {
-  return { id: id(), label: name, serviceMode: "pickup", spotNumber: null, active: true, token: "demo" };
+export function makePickup(name: string, fixed?: string): Touchpoint {
+  return { id: fixed ?? id(), label: name, serviceMode: "pickup", spotNumber: null, active: true, token: "demo" };
 }
 
 function item(
@@ -168,17 +194,8 @@ function foodMenu(): MenuCategory[] {
   ];
 }
 
-function taxFor(lines: { amount: number; category: TaxCategory }[]): number {
-  // Same rule as the API: each tax rounds half-up on its own pre-tax base.
-  const total = (lines_: typeof lines) => lines_.reduce((sum, l) => sum + l.amount, 0);
-  const halfUp = (base: number, bps: number) => {
-    const scaled = base * bps + 5000;
-    return (scaled - (scaled % 10000)) / 10000;
-  };
-  return (
-    halfUp(total(lines), GST.rateBps) +
-    halfUp(total(lines.filter((l) => l.category === "Alcohol")), PST.rateBps)
-  );
+export function taxesFor(category: TaxCategory, taxes: readonly TaxRate[]): TaxRate[] {
+  return taxes.filter((t) => t.code === "GST" || (category === "Alcohol" && t.code === "PST"));
 }
 
 function closedStatus(mode: ServiceMode): OrderStatus {
@@ -219,9 +236,10 @@ function sampleOrders(menu: MenuCategory[], touchpoints: Touchpoint[]): Order[] 
       unitPriceCents: m.priceCents,
       category: m.taxCategory,
     }));
-    const amounts = lines.map((l) => ({ amount: l.unitPriceCents * l.quantity, category: l.category }));
-    const subtotalCents = amounts.reduce((sum, l) => sum + l.amount, 0);
-    const taxCents = taxFor(amounts);
+    const { subtotalCents, taxCents, totalCents } = quote(
+      lines.map((l) => ({ amountCents: l.unitPriceCents * l.quantity, taxes: taxesFor(l.category, [GST, PST]) })),
+      0,
+    );
     return {
       id: id(),
       ticketNumber: FIRST_TICKET + i,
@@ -230,10 +248,16 @@ function sampleOrders(menu: MenuCategory[], touchpoints: Touchpoint[]): Order[] 
       guestName: pickup ? GUESTS[i % GUESTS.length]! : null,
       status: plan.status === "closed" ? closedStatus(mode) : plan.status,
       placedAt: new Date(now - plan.minutesAgo * 60_000).toISOString(),
-      lines: lines.map(({ name, quantity, unitPriceCents }) => ({ name, quantity, unitPriceCents })),
+      lines: lines.map(({ name, quantity, unitPriceCents }) => ({
+        name,
+        quantity,
+        unitPriceCents,
+        options: [],
+        notes: "",
+      })),
       subtotalCents,
       taxCents,
-      totalCents: subtotalCents + taxCents,
+      totalCents,
     };
   });
   return orders.reverse();
@@ -260,10 +284,10 @@ function venue(
 
 export function demoBrewery(): Workspace {
   const touchpoints = [
-    ...Array.from({ length: 12 }, (_, i) => makeSpot("table", i + 1)),
-    makePickup("Bar counter"),
+    ...Array.from({ length: 12 }, (_, i) => makeSpot("table", i + 1, fixedId(BREWERY_TOUCHPOINTS, i + 1))),
+    makePickup("Bar counter", fixedId(BREWERY_TOUCHPOINTS, PICKUP_NUMBER)),
   ];
-  const menu = breweryMenu();
+  const menu = withFixedIds(breweryMenu(), "d0000b02");
   return {
     id: BREWERY_ID,
     venue: venue("Demo Brewery", "demo-brewery", "breweries", "CA", "British Columbia"),
@@ -275,12 +299,13 @@ export function demoBrewery(): Workspace {
     payment: { connected: true, accountLabel: "Demo Brewery (test account)" },
     taxes: [GST, PST],
     sampleMenu: true,
+    carts: {},
   };
 }
 
 export function demoFoodTruck(): Workspace {
-  const touchpoints = [makePickup("Pickup window")];
-  const menu = foodMenu();
+  const touchpoints = [makePickup("Pickup window", fixedId(TRUCK_TOUCHPOINTS, PICKUP_NUMBER))];
+  const menu = withFixedIds(foodMenu(), "d0000f02");
   return {
     id: FOOD_TRUCK_ID,
     venue: venue("Demo Food Truck", "demo-food-truck", "food-trucks", "CA", "British Columbia"),
@@ -292,6 +317,7 @@ export function demoFoodTruck(): Workspace {
     payment: { connected: false, accountLabel: null },
     taxes: [GST, PST],
     sampleMenu: true,
+    carts: {},
   };
 }
 
@@ -327,5 +353,6 @@ export function workspaceFromSignUp(input: {
     payment: { connected: false, accountLabel: null },
     taxes: [GST, PST],
     sampleMenu: own.length === 0,
+    carts: {},
   };
 }

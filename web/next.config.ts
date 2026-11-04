@@ -16,8 +16,10 @@ const nextConfig: NextConfig = {
     return demoMode ? [] : [{ source: "/api/:path*", destination: `${apiInternalUrl}/:path*` }];
   },
   async redirects() {
-    // Guest pages need the API, so a scanned demo QR lands on an explanation instead.
-    return demoMode ? [{ source: "/v/:path*", destination: "/demo/scan", permanent: false }] : [];
+    // Guest pages need the API, so a scanned demo QR opens the mock guest page. ?token carries over.
+    return demoMode
+      ? [{ source: "/v/:slug/p/:touchpointId", destination: "/demo/v/:slug/p/:touchpointId", permanent: false }]
+      : [];
   },
 };
 
