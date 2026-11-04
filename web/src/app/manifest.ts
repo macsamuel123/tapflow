@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "TapFlow",
     short_name: "TapFlow",
-    description: "Scan, order and pay from your seat.",
+    description: "Scan. Order. Serve. QR ordering for any venue.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

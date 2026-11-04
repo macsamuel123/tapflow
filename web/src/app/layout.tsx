@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "TapFlow", template: "%s · TapFlow" },
-  description: "Scan, order and pay from your seat.",
+  description: "Scan. Order. Serve. QR ordering for any venue.",
   applicationName: "TapFlow",
 };
 
