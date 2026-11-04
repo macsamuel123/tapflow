@@ -14,6 +14,7 @@ export function useData<T>(load: () => Promise<T>) {
   const reload = useCallback(async () => {
     try {
       setData(await loader.current());
+      setError(null);
     } catch (err) {
       setError(err instanceof ServiceError ? err.message : FALLBACK);
     }

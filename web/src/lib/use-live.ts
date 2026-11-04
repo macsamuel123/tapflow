@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { DEMO_CLOUD } from "@/lib/demo-cloud/config";
 
 const POLL_MS = 2000;
 
@@ -12,7 +13,8 @@ export function useLive(refresh: () => void): void {
   useEffect(() => {
     const run = () => latest.current();
     window.addEventListener("storage", run);
-    const timer = window.setInterval(run, POLL_MS);
+    // Shared demo venues update through useRealtime. This timer is for the same-browser demo.
+    const timer = DEMO_CLOUD ? undefined : window.setInterval(run, POLL_MS);
     return () => {
       window.removeEventListener("storage", run);
       window.clearInterval(timer);

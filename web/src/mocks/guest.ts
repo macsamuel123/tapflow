@@ -2,7 +2,7 @@ import type { Cart, CartLine, Menu, MenuItem as GuestMenuItem } from "@/lib/api-
 import { checkLine, MAX_CART_LINES, MAX_QUANTITY, type CheckedLine } from "@/lib/cart-rules";
 import { allergenLabel } from "@/lib/menu/allergens";
 import { quote, type PricingLine } from "@/lib/pricing";
-import { MAX_GUEST_NAME } from "@/lib/guest";
+import { cleanGuestName, MAX_GUEST_NAME } from "@/lib/guest";
 import { ServiceError } from "@/services/types";
 import type {
   GuestAccess,
@@ -268,7 +268,7 @@ export const guestService: GuestService = {
       if (access(touchpoint, context.token) !== "verified") {
         throw new ServiceError("Scan the QR on your touchpoint to check out.");
       }
-      const name = guestName?.trim() ?? "";
+      const name = cleanGuestName(guestName ?? "");
       const pickup = touchpoint.serviceMode === "pickup";
       if (pickup && !name) throw new ServiceError("Enter your first name so we can call your order.");
       if (name.length > MAX_GUEST_NAME) throw new ServiceError(`Use ${MAX_GUEST_NAME} characters or fewer.`);

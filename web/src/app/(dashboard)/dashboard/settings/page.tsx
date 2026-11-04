@@ -3,7 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { ServiceSetupFields, type SetupForm } from "@/components/setup/ServiceSetupFields";
-import { Button, Card, FormError, SelectField, TextField } from "@/components/ui";
+import { Button, Card, FormError, LinkButton, SelectField, TextField } from "@/components/ui";
+import { READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
 import { formatBps } from "@/lib/percent";
 import { COUNTRIES, REGIONS } from "@/lib/regions";
 import { parseSpotCount, validateSetup, type SetupErrors } from "@/lib/service-setup";
@@ -124,7 +125,7 @@ async function load() {
 }
 
 export default function SettingsPage() {
-  const { venue, refresh } = useDashboard();
+  const { venue, refresh, shared } = useDashboard();
   const { data, error } = useData(load);
 
   async function reset() {
@@ -136,10 +137,17 @@ export default function SettingsPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-black text-ink">Settings</h1>
       <FormError message={error} />
-      <VenueDetails venue={venue} />
+      {shared ? (
+        <Card className="space-y-2 bg-brand-50">
+          <p className="text-sm text-ink">This shared demo venue is read-only.</p>
+          <LinkButton href="/signup" variant="secondary">{READ_ONLY_NOTE}</LinkButton>
+        </Card>
+      ) : (
+        <VenueDetails venue={venue} />
+      )}
       {data ? (
         <>
-          <ServiceSetupCard initial={{ ...data.setup, spotCount: String(data.setup.spotCount || 12) }} />
+          {shared ? null : <ServiceSetupCard initial={{ ...data.setup, spotCount: String(data.setup.spotCount || 12) }} />}
           <Taxes taxes={data.taxes} />
         </>
       ) : null}

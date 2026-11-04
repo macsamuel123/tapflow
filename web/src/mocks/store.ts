@@ -43,7 +43,7 @@ export type DemoState = {
 };
 
 // Passwords are never kept. Bump the version when the shape of the state changes.
-const STORAGE_KEY = "tapflow:demo:v5";
+const STORAGE_KEY = "tapflow:demo:v6";
 
 function freshWorkspaces(): Workspace[] {
   return [demoBrewery(), demoFoodTruck()];

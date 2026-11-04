@@ -1,9 +1,27 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect } from "react";
 import type { Venue } from "@/services/types";
 
-export const DashboardContext = createContext<{ venue: Venue; refresh: () => Promise<void> } | null>(null);
+export type DashboardValue = {
+  venue: Venue;
+  refresh: () => Promise<void>;
+  /** A demo venue shared across devices: read-only apart from orders and sold-out. */
+  shared: boolean;
+  /** Counts up whenever shared data changes, so pages know to reload. */
+  tick: number;
+};
+
+export const DashboardContext = createContext<DashboardValue | null>(null);
+
+/** Reloads a page's data when shared orders or stock change. */
+export function useDashboardReload(reload: () => unknown): void {
+  const value = useContext(DashboardContext);
+  const tick = value?.tick ?? 0;
+  useEffect(() => {
+    if (tick > 0) void reload();
+  }, [tick, reload]);
+}
 
 export function useDashboard() {
   const value = useContext(DashboardContext);

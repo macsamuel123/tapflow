@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useState, type FormEvent } from "react";
+import { useDashboard, useDashboardReload } from "@/components/dashboard/DashboardContext";
 import { OrderCard } from "@/components/dashboard/OrderCard";
-import { FormError } from "@/components/ui";
+import { Button, FormError, TextField } from "@/components/ui";
+import { Sheet } from "@/components/menu-builder/Sheet";
 import { useData } from "@/lib/use-data";
 import { useLive } from "@/lib/use-live";
-import { getServices, type ServiceMode } from "@/services";
+import { postJson } from "@/lib/demo-cloud/browser";
+import { getServices, ServiceError, type ServiceMode } from "@/services";
+
+function postClear(secret: string) {
+  return postJson("/demo/api/clear", { secret });
+}
 
 type Filter = "all" | ServiceMode;
 
@@ -17,9 +23,26 @@ const FILTERS: { value: Filter; label: string }[] = [
 ];
 
 export default function OrdersPage() {
-  const { venue } = useDashboard();
+  const { venue, shared } = useDashboard();
   const { data, error, reload, run } = useData(() => getServices().orders.list());
   useLive(() => void reload()); // guest orders from another tab appear on their own
+  useDashboardReload(reload);
+  const [clearing, setClearing] = useState(false);
+  const [secret, setSecret] = useState("");
+  const [clearError, setClearError] = useState<string | null>(null);
+
+  async function clearOrders(event: FormEvent) {
+    event.preventDefault();
+    setClearError(null);
+    try {
+      await postClear(secret);
+      setClearing(false);
+      setSecret("");
+      await reload();
+    } catch (err) {
+      setClearError(err instanceof ServiceError ? err.message : "Something went wrong. Try again.");
+    }
+  }
   const [filter, setFilter] = useState<Filter>("all");
   const hasBoth = new Set(data?.map((o) => o.serviceMode)).size > 1;
   const shown = data?.filter((o) => filter === "all" || o.serviceMode === filter) ?? [];
@@ -44,6 +67,7 @@ export default function OrdersPage() {
           ))}
         </div>
       ) : null}
+      {data && data.length === 0 ? <p className="text-gray-600">No orders yet. Scan a QR code to place one.</p> : null}
       <div className="space-y-3">
         {shown.map((order) => (
           <OrderCard
@@ -54,6 +78,22 @@ export default function OrdersPage() {
           />
         ))}
       </div>
+      {shared ? (
+        <Button variant="danger" onClick={() => setClearing(true)}>Clear demo orders</Button>
+      ) : null}
+      {clearing ? (
+        <Sheet
+          title="Clear demo orders"
+          onClose={() => setClearing(false)}
+          footer={<Button type="submit" form="clear-form" variant="danger" className="flex-1">Clear all orders</Button>}
+        >
+          <form id="clear-form" onSubmit={(e) => void clearOrders(e)} className="space-y-3">
+            <p className="text-gray-600">This removes every shared order and resets sold-out items, for everyone.</p>
+            <TextField label="Admin secret" type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} />
+            <FormError message={clearError} />
+          </form>
+        </Sheet>
+      ) : null}
     </div>
   );
 }

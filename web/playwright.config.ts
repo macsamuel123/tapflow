@@ -6,6 +6,7 @@ const PORT = 3100;
 // needed the API would fail here.
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/cloud/**", // needs Supabase: make e2e-cloud
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,

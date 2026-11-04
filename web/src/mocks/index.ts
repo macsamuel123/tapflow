@@ -174,6 +174,9 @@ export const mockServices: Services = {
     async isLocalOnly() {
       return current().id === YOUR_VENUE_ID;
     },
+    async isSharedDemo() {
+      return false;
+    },
     async listWorkspaces() {
       const state = readState();
       const activeId = activeWorkspace(state).id;

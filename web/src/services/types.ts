@@ -177,6 +177,8 @@ export interface AuthService {
 export interface VenueService {
   /** True for a venue that exists only in this browser. */
   isLocalOnly(): Promise<boolean>;
+  /** True for a demo venue shared across devices, whose menu and touchpoints are read-only. */
+  isSharedDemo(): Promise<boolean>;
   listWorkspaces(): Promise<WorkspaceSummary[]>;
   current(): Promise<Venue>;
   switchTo(workspaceId: string): Promise<void>;

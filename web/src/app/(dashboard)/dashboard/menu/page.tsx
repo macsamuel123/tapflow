@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState, type DragEvent, type FormEvent } from "react";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useDashboard, useDashboardReload } from "@/components/dashboard/DashboardContext";
 import { CsvImporter } from "@/components/menu-builder/CsvImporter";
 import { ItemEditor } from "@/components/menu-builder/ItemEditor";
 import { ConfirmDialog, Sheet } from "@/components/menu-builder/Sheet";
-import { Button, Card, FormError, Pill, TextField } from "@/components/ui";
+import { Button, Card, FormError, LinkButton, Pill, TextField } from "@/components/ui";
+import { READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
 import { allergenLabel, NO_ALLERGENS_LABEL, SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
 import { categoryNameError, menuKey } from "@/lib/menu/rules";
 import { formatCents } from "@/lib/money";
@@ -28,7 +29,7 @@ function ItemCard({
 }: {
   item: MenuItem;
   currency: string;
-  onEdit: () => void;
+  onEdit?: () => void;
   onSoldOut: () => void;
 }) {
   return (
@@ -38,9 +39,15 @@ function ItemCard({
         <img src={item.photoUrl} alt="" data-testid="item-photo" className="size-16 shrink-0 rounded-xl object-cover" />
       ) : null}
       <div className="min-w-0 flex-1">
-        <button type="button" onClick={onEdit} aria-label={`Edit ${item.name}`} className="min-h-6 w-full text-left font-semibold text-ink">
-          {item.name} {item.inStock ? null : <Pill tone="red">Sold out</Pill>}
-        </button>
+        {onEdit ? (
+          <button type="button" onClick={onEdit} aria-label={`Edit ${item.name}`} className="min-h-6 w-full text-left font-semibold text-ink">
+            {item.name} {item.inStock ? null : <Pill tone="red">Sold out</Pill>}
+          </button>
+        ) : (
+          <p className="font-semibold text-ink">
+            {item.name} {item.inStock ? null : <Pill tone="red">Sold out</Pill>}
+          </p>
+        )}
         {item.description ? <p className="text-sm text-gray-600">{item.description}</p> : null}
         <p className="mt-1 text-sm font-medium text-ink">
           {formatCents(item.priceCents, currency)}
@@ -79,8 +86,9 @@ function ItemCard({
 }
 
 export default function MenuPage() {
-  const { venue } = useDashboard();
+  const { venue, shared } = useDashboard();
   const { data, error, reload, run } = useData(load);
+  useDashboardReload(reload);
   const [editing, setEditing] = useState<{ item: MenuItem | null; category: string } | null>(null);
   const [naming, setNaming] = useState<{ id: string | null; name: string } | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -130,7 +138,13 @@ export default function MenuPage() {
         <p className="text-gray-600">Changes show right away. Sold-out items can&apos;t be ordered.</p>
       </div>
       <FormError message={error} />
-      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+      {shared ? (
+        <Card className="space-y-2 bg-brand-50">
+          <p className="text-sm text-ink">This shared demo menu is read-only, apart from sold-out.</p>
+          <LinkButton href="/signup" variant="secondary">{READ_ONLY_NOTE}</LinkButton>
+        </Card>
+      ) : null}
+      <div className={shared ? "hidden" : "grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"}>
         <Button className="col-span-2 sm:col-span-1" onClick={() => setEditing({ item: null, category: names[0] ?? "" })}>Add item</Button>
         <Button variant="secondary" onClick={() => setNaming({ id: null, name: "" })}>Add category</Button>
         <Button variant="secondary" onClick={() => setImporting(true)}>Upload CSV</Button>
@@ -159,6 +173,7 @@ export default function MenuPage() {
             className={`space-y-2 rounded-2xl ${dragId && dragId !== category.id ? "outline-2 outline-dashed outline-gray-300" : ""}`}
           >
             <div className="flex flex-wrap items-center gap-x-1">
+              {shared ? null : (
               <span
                 draggable
                 role="button"
@@ -174,6 +189,7 @@ export default function MenuPage() {
               >
                 ⋮⋮
               </span>
+              )}
               <button
                 type="button"
                 aria-expanded={open}
@@ -182,10 +198,12 @@ export default function MenuPage() {
               >
                 {category.name} <span className="text-sm font-normal text-gray-500">({category.items.length})</span>
               </button>
+              {shared ? null : <>
               <Button variant="ghost" className="px-2" aria-label={`Move ${category.name} up`} disabled={index === 0} onClick={() => reorder(category.id, index - 1)}>↑</Button>
               <Button variant="ghost" className="px-2" aria-label={`Move ${category.name} down`} disabled={index === categories.length - 1} onClick={() => reorder(category.id, index + 1)}>↓</Button>
               <Button variant="ghost" className="px-2" aria-label={`Rename ${category.name}`} onClick={() => setNaming({ id: category.id, name: category.name })}>Rename</Button>
               <Button variant="ghost" className="px-2 text-red-700" aria-label={`Delete ${category.name}`} onClick={() => void run(() => menu.deleteCategory(category.id))}>Delete</Button>
+              </>}
             </div>
             {open ? (
               <ul className="space-y-2">
@@ -194,7 +212,7 @@ export default function MenuPage() {
                     <ItemCard
                       item={item}
                       currency={venue.currency}
-                      onEdit={() => setEditing({ item, category: category.name })}
+                      onEdit={shared ? undefined : () => setEditing({ item, category: category.name })}
                       onSoldOut={() => void run(() => menu.setInStock(item.id, !item.inStock))}
                     />
                   </li>

@@ -3,7 +3,7 @@ import type { MenuItem, MenuOption } from "@/services/types";
 
 export const MIN_QUANTITY = 1;
 export const MAX_QUANTITY = 20;
-export const MAX_CART_LINES = 30;
+export const MAX_CART_LINES = 20;
 
 export type CheckedLine = { options: MenuOption[]; unitPriceCents: number; lineTotalCents: number };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useDashboard, useDashboardReload } from "@/components/dashboard/DashboardContext";
 import { OrderCard } from "@/components/dashboard/OrderCard";
 import { Card, FormError, LinkButton } from "@/components/ui";
 import { formatCents } from "@/lib/money";
@@ -15,7 +15,8 @@ async function load() {
 
 export default function OverviewPage() {
   const { venue } = useDashboard();
-  const { data, error } = useData(load);
+  const { data, error, reload } = useData(load);
+  useDashboardReload(reload);
   const kpis = data
     ? [
         { label: "Today's orders", value: String(data.summary.ordersToday) },

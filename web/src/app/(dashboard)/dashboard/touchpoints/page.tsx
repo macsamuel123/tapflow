@@ -3,8 +3,9 @@
 import { useState, type FormEvent } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { QrCode } from "@/components/qr/QrCode";
-import { Button, Card, FormError, Pill, TextField } from "@/components/ui";
+import { Button, Card, FormError, LinkButton, Pill, TextField } from "@/components/ui";
 import { LOCAL_VENUE_NOTE } from "@/lib/demo";
+import { READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
 import { DEFAULT_PICKUP_NAME } from "@/lib/industries";
 import { downloadQrPdf } from "@/lib/qr/pdf";
 import { touchpointUrl } from "@/lib/qr/url";
@@ -23,7 +24,7 @@ async function load() {
 }
 
 export default function TouchpointsPage() {
-  const { venue } = useDashboard();
+  const { venue, shared } = useDashboard();
   const { data, error, run } = useData(load);
   const [openId, setOpenId] = useState<string | null>(null);
   const [count, setCount] = useState("");
@@ -89,7 +90,7 @@ export default function TouchpointsPage() {
                 label={`QR code for ${tp.label}`}
                 className="mx-auto w-40"
               />
-              <div className="flex flex-wrap gap-2">
+              <div className={shared ? "hidden" : "flex flex-wrap gap-2"}>
                 <Button
                   variant="secondary"
                   onClick={() =>
@@ -126,13 +127,16 @@ export default function TouchpointsPage() {
           <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
         ) : null}
       </div>
+      {shared ? (
+        <LinkButton href="/signup" variant="secondary" className="w-full sm:w-auto">{READ_ONLY_NOTE}</LinkButton>
+      ) : null}
       <FormError message={error ?? pdfError} />
       <p role="status" className="text-sm font-medium text-brand-800">{notice}</p>
 
       <section className="space-y-2">
         <h2 className="text-lg font-bold text-ink">{plural}</h2>
         {spots.length ? <ul className="space-y-2">{spots.map(row)}</ul> : <p className="text-gray-600">None yet.</p>}
-        <form onSubmit={(e) => void addSpots(e)} noValidate className="flex items-start gap-2 pt-2">
+        <form onSubmit={(e) => void addSpots(e)} noValidate className={shared ? "hidden" : "flex items-start gap-2 pt-2"}>
           <TextField
             label={`Add ${plural.toLowerCase()}: how many more?`}
             inputMode="numeric"
@@ -148,7 +152,7 @@ export default function TouchpointsPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-bold text-ink">Pickup points</h2>
         {pickups.length ? <ul className="space-y-2">{pickups.map(row)}</ul> : <p className="text-gray-600">None yet.</p>}
-        <form onSubmit={(e) => void addPickup(e)} className="flex items-end gap-2 pt-2">
+        <form onSubmit={(e) => void addPickup(e)} className={shared ? "hidden" : "flex items-end gap-2 pt-2"}>
           <TextField
             label="Pickup point name"
             className="flex-1"

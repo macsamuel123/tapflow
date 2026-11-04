@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card, FormError, LinkButton } from "@/components/ui";
 import { orderSteps } from "@/lib/guest";
+import { DEMO_CLOUD, SHARED_SLUGS } from "@/lib/demo-cloud/config";
 import { formatCents } from "@/lib/money";
 import { useData } from "@/lib/use-data";
 import { useLive } from "@/lib/use-live";
+import { useRealtime } from "@/lib/use-realtime";
 import { getServices, type GuestOrder } from "@/services";
 
 const SIMULATE_MS = 3000;
@@ -34,6 +36,8 @@ export function GuestOrderStatus({
   const order = data?.order ?? null;
   const [simulate, setSimulate] = useState(false);
   useLive(() => void reload());
+  const cloud = DEMO_CLOUD && SHARED_SLUGS.includes(slug);
+  useRealtime(cloud ? { kind: "order", id: orderId } : null, () => void reload());
 
   const done = !order || ["delivered", "picked_up", "cancelled"].includes(order.status);
   useEffect(() => {
@@ -96,7 +100,7 @@ export function GuestOrderStatus({
         <input type="checkbox" className="size-5 accent-brand-700" checked={simulate} onChange={(e) => setSimulate(e.target.checked)} />
         Simulate staff (demo)
       </label>
-      <p className="text-xs text-gray-500">Live updates work in this browser only for now.</p>
+      {cloud ? null : <p className="text-xs text-gray-500">Live updates work in this browser only for now.</p>}
       {menuHref ? <LinkButton href={menuHref} variant="secondary" className="w-full">Back to menu</LinkButton> : null}
     </main>
   );

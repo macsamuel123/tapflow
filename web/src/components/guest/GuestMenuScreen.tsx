@@ -7,11 +7,13 @@ import { ModifierSheet } from "@/components/modifier-sheet/ModifierSheet";
 import { Button, FormError, TextField } from "@/components/ui";
 import type { Cart, MenuItem } from "@/lib/api-types";
 import { LOCAL_VENUE_NOTE } from "@/lib/demo";
+import { CHECKOUT_NOTE, DEMO_CLOUD, SHARED_SLUGS } from "@/lib/demo-cloud/config";
 import { MAX_GUEST_NAME } from "@/lib/guest";
 import { SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
 import { formatCents } from "@/lib/money";
 import { useData } from "@/lib/use-data";
 import { useLive } from "@/lib/use-live";
+import { useRealtime } from "@/lib/use-realtime";
 import { getServices, ServiceError, type GuestContext, type GuestVenue } from "@/services";
 
 const ACCESS_NOTES: Record<Exclude<GuestVenue["access"], "verified">, string> = {
@@ -50,6 +52,8 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
   const [guestName, setGuestName] = useState("");
 
   useLive(() => void reload()); // sold-out, price and QR changes from the dashboard
+  const cloud = DEMO_CLOUD && SHARED_SLUGS.includes(context.slug);
+  useRealtime(cloud ? { kind: "stock", slug: context.slug } : null, () => void reload());
   const { guest } = getServices();
 
   if (!data) return <div className="p-6"><FormError message={error} /></div>;
@@ -205,6 +209,7 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
               <p className="text-center text-xs text-gray-500">
                 {blocked ? "Remove unavailable items to continue." : "No real payment is taken."}
               </p>
+              <p className="text-center text-xs font-medium text-gray-600">{CHECKOUT_NOTE}</p>
             </div>
           }
         />
