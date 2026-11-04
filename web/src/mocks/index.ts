@@ -157,7 +157,9 @@ export const mockServices: Services = {
 
   venues: {
     async listWorkspaces() {
-      return readState().workspaces.map((w) => ({ id: w.id, name: w.venue.name }));
+      const state = readState();
+      const activeId = activeWorkspace(state).id;
+      return state.workspaces.map((w) => ({ id: w.id, name: w.venue.name, active: w.id === activeId }));
     },
     async current() {
       return current().venue;

@@ -8,9 +8,9 @@ export function SiteHeader() {
       <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
         <Logo />
         <div className="ml-auto flex items-center gap-1 sm:gap-3">
-          <Link href="/pricing" className="px-2 py-2 text-sm font-medium text-gray-700 hover:text-ink">Pricing</Link>
-          <Link href="/login" className="px-2 py-2 text-sm font-medium text-gray-700 hover:text-ink">Log in</Link>
-          <LinkButton href="/signup" className="px-3">Get started</LinkButton>
+          <Link href="/pricing" className="px-1.5 py-2 text-sm font-medium whitespace-nowrap text-gray-700 hover:text-ink sm:px-2">Pricing</Link>
+          <Link href="/login" className="px-1.5 py-2 text-sm font-medium whitespace-nowrap text-gray-700 hover:text-ink sm:px-2">Log in</Link>
+          <LinkButton href="/signup" className="whitespace-nowrap">Get started</LinkButton>
         </div>
       </nav>
     </header>

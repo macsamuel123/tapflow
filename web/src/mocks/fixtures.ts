@@ -162,7 +162,9 @@ function sampleOrders(menu: MenuCategory[], touchpoints: Touchpoint[]): Order[] 
     const point = pickup ? pickups[i % pickups.length] : spot;
     if (!point || items.length === 0) throw new Error("A workspace needs a touchpoint and items");
     const mode: ServiceMode = pickup ? "pickup" : "delivery";
-    const chosen = [items[i % items.length]!, items[(i * 2 + 1) % items.length]!];
+    const first = items[i % items.length]!;
+    const others = items.filter((m) => m !== first);
+    const chosen = others.length ? [first, others[(i * 2) % others.length]!] : [first];
     const lines = chosen.map((m, n) => ({
       name: m.name,
       quantity: n === 0 ? (i % 2) + 1 : 1,

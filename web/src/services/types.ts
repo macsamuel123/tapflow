@@ -85,7 +85,7 @@ export type PaymentStatus = { connected: boolean; accountLabel: string | null };
 
 export type TaxRate = { code: string; name: string; rateBps: number };
 
-export type WorkspaceSummary = { id: string; name: string };
+export type WorkspaceSummary = { id: string; name: string; active: boolean };
 
 export type SignUpInput = {
   industry: IndustryId;
