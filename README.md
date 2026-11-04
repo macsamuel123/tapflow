@@ -31,3 +31,11 @@ Local services:
 Demo logins (magic link): `owner@demo.test`, `manager@demo.test`, `fulfillment@demo.test`, `runner@demo.test`, and the platform admin `admin@tapflow.test`.
 
 The full README (architecture diagram and demo script) comes in M4.
+
+## Demo mode (S0)
+
+With `NEXT_PUBLIC_DEMO_MODE=true`, the marketing site, sign-up and venue dashboard run on sample data in `web/src/mocks/`, with no API or database. See PLAN.md §12. To run it locally:
+
+```bash
+NEXT_PUBLIC_DEMO_MODE=true pnpm --dir web dev
+```

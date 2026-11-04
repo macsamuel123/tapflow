@@ -21,6 +21,7 @@ The repo lives in WSL2 at `~/code/restaurant_app`. Run all commands from there.
 | `make types` | `supabase gen types` → `web/src/lib/database.types.ts` |
 | `make qr-urls` | Print the signed dev touchpoint URLs for the seed venue |
 | `make e2e` | Playwright order flow (M3; needs `make stripe-listen`) |
+| `make e2e-saas` | Playwright S0 demo flow at 390px (first run: `pnpm --dir web exec playwright install --with-deps chromium`) |
 | `make stripe-listen` | `stripe listen` forwarding to the API webhook (M3) |
 | `make tunnel` | cloudflared HTTPS tunnel to :3000 (M3) |
 
