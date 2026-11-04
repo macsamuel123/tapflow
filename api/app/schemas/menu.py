@@ -19,9 +19,15 @@ class ModifierGroupOut(Outbound):
     modifiers: list[ModifierOut]
 
 
-class TaxCategoryOut(Outbound):
+class TaxOut(Outbound):
+    code: str
     name: str
     rate_bps: int
+
+
+class TaxCategoryOut(Outbound):
+    name: str
+    taxes: list[TaxOut]
 
 
 class MenuItemOut(Outbound):

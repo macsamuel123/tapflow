@@ -45,11 +45,12 @@ class CartLineOut(Outbound):
 
 
 class TaxLineOut(Outbound):
-    """Tax for one tax category: rounded half-up on that category's subtotal."""
+    """One tax (GST, PST): rounded half-up on its own taxable base."""
 
+    code: str
     name: str
     rate_bps: int
-    subtotal_cents: int
+    base_cents: int
     tax_cents: int
 
 

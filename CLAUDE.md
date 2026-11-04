@@ -31,8 +31,8 @@ Run `make lint` and `make test` before calling a milestone done, and report the 
 - TS `strict`. Pydantic `extra="forbid"` on every inbound model. Everything typed; the Supabase client uses generated types.
 - SQL lives only in `api/app/repositories/`. Only `api/app/payments/` imports `stripe`.
 - Migrations are append-only: add a new file and never edit an applied one.
-- Seed and defaults: CAD, `America/Vancouver`. Tax is per tax category: Food 500 bps, Alcohol 1500 bps.
-- Tax: each menu item has a tax category. Tax is computed per category on its subtotal, rounded half-up per category, then summed. Never a single venue-wide rate.
+- Seed and defaults: CAD, `America/Vancouver`. Taxes: GST 500 bps, PST 1000 bps. Food → GST; Alcohol → GST + PST.
+- Tax: each menu item has a tax category, which maps to a set of taxes. Each tax is rounded half-up on its own taxable base, then summed. Tax is never applied to tax. Never a single venue-wide rate.
 - Small, reviewable commits per milestone. Never commit secrets: `.env*` is gitignored except `.env.example`.
 - Out of scope: AI waiter/judge (Phase 2), voice, vision ingestion, geolocation, POS/printer, admin dashboard. Tips land in M3 (tip_cents, untaxed).
 

@@ -11,6 +11,7 @@ from app.schemas.menu import (
     ModifierGroupOut,
     ModifierOut,
     TaxCategoryOut,
+    TaxOut,
     VenueOut,
 )
 from app.schemas.sessions import SLUG_PATTERN
@@ -30,7 +31,11 @@ def _item_out(item: MenuItem) -> MenuItemOut:
         dietary_tags=list(item.dietary_tags),
         in_stock=item.in_stock,
         tax_category=TaxCategoryOut(
-            name=item.tax_category.name, rate_bps=item.tax_category.rate_bps
+            name=item.tax_category.name,
+            taxes=[
+                TaxOut(code=t.code, name=t.name, rate_bps=t.rate_bps)
+                for t in item.tax_category.taxes
+            ],
         ),
         modifier_groups=[
             ModifierGroupOut(

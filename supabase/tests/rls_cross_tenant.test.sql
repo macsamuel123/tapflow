@@ -1,10 +1,10 @@
 -- RLS / grants: tenant isolation, "tickets only after payment", qr_secret secrecy, status guard,
--- per-category tax integrity. Run with `make test-db` (supabase test db). Everything is rolled back.
+-- tax component integrity. Run with `make test-db` (supabase test db). Everything is rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(19);
+select plan(26);
 
 -- ------------------------------------------------------------------ fixtures (as postgres)
 insert into auth.users (instance_id, id, aud, role, email) values
@@ -23,9 +23,15 @@ insert into public.touchpoints (id, venue_id, label, kind, qr_secret) values
   ('30000000-0000-4000-8000-00000000000a', '20000000-0000-4000-8000-00000000000a', 'A1', 'seat', 'test-secret-aaaaaaaa'),
   ('30000000-0000-4000-8000-00000000000b', '20000000-0000-4000-8000-00000000000b', 'B1', 'table', 'test-secret-bbbbbbbb');
 
-insert into public.tax_categories (id, venue_id, name, rate_bps) values
-  ('60000000-0000-4000-8000-00000000000a', '20000000-0000-4000-8000-00000000000a', 'Food', 500),
-  ('60000000-0000-4000-8000-00000000000b', '20000000-0000-4000-8000-00000000000b', 'Food', 500);
+insert into public.tax_categories (id, venue_id, name) values
+  ('60000000-0000-4000-8000-00000000000a', '20000000-0000-4000-8000-00000000000a', 'Food'),
+  ('60000000-0000-4000-8000-00000000000b', '20000000-0000-4000-8000-00000000000b', 'Food');
+insert into public.taxes (id, venue_id, code, name, rate_bps) values
+  ('61000000-0000-4000-8000-00000000000a', '20000000-0000-4000-8000-00000000000a', 'GST', 'GST', 500),
+  ('61000000-0000-4000-8000-00000000000b', '20000000-0000-4000-8000-00000000000b', 'GST', 'GST', 500);
+insert into public.tax_category_taxes (tax_category_id, tax_id, venue_id) values
+  ('60000000-0000-4000-8000-00000000000a', '61000000-0000-4000-8000-00000000000a', '20000000-0000-4000-8000-00000000000a'),
+  ('60000000-0000-4000-8000-00000000000b', '61000000-0000-4000-8000-00000000000b', '20000000-0000-4000-8000-00000000000b');
 
 insert into public.menu_categories (id, venue_id, name) values
   ('40000000-0000-4000-8000-00000000000a', '20000000-0000-4000-8000-00000000000a', 'Mains');
@@ -43,6 +49,11 @@ insert into public.orders
   -- B: one paid
   ('50000000-0000-4000-8000-0000000000b1', '20000000-0000-4000-8000-00000000000b', '30000000-0000-4000-8000-00000000000b',
    'paid', 'CAD', 2000, 100, 60, 2100, now(), 1, current_date);
+
+insert into public.order_tax_lines (order_id, tax_code, tax_name, rate_bps, base_cents, tax_cents) values
+  ('50000000-0000-4000-8000-0000000000a1', 'GST', 'GST', 500, 1000, 50),
+  ('50000000-0000-4000-8000-0000000000a2', 'GST', 'GST', 500, 1000, 50),
+  ('50000000-0000-4000-8000-0000000000b1', 'GST', 'GST', 500, 2000, 100);
 
 -- ------------------------------------------------------------------ as fulfillment staff of A
 set local role authenticated;
@@ -65,8 +76,14 @@ select throws_ok($$update public.orders set status = 'accepted' where id = '5000
   '42501', null, 'staff cannot write orders directly (writes go through the API)');
 select throws_ok('select * from public.touchpoint_sessions', '42501', null,
   'staff cannot read diner sessions');
-select throws_ok($$insert into public.tax_categories (venue_id, name, rate_bps) values ('20000000-0000-4000-8000-00000000000a', 'Sneaky', 0)$$,
-  '42501', null, 'staff cannot write tax categories (rates are set by the API/owner tooling)');
+select throws_ok($$insert into public.tax_categories (venue_id, name) values ('20000000-0000-4000-8000-00000000000a', 'Sneaky')$$,
+  '42501', null, 'staff cannot write tax categories (set by the API/owner tooling)');
+select throws_ok($$update public.taxes set rate_bps = 0$$,
+  '42501', null, 'staff cannot write taxes');
+select is((select count(*)::int from public.order_tax_lines),
+  1, 'staff of A read tax lines of their paid order only, not pending or other venues');
+select throws_ok($$delete from public.order_tax_lines$$,
+  '42501', null, 'staff cannot change order tax lines');
 
 -- ------------------------------------------------------------------ as owner of B
 select set_config('request.jwt.claims',
@@ -87,6 +104,9 @@ select ok((select count(*) from public.menu_items where venue_id = '20000000-000
   'anon can read menu items');
 select ok((select count(*) from public.tax_categories where venue_id = '20000000-0000-4000-8000-00000000000a') >= 1,
   'anon can read tax categories (rates shown per item)');
+select ok((select count(*) from public.taxes where venue_id = '20000000-0000-4000-8000-00000000000a') >= 1,
+  'anon can read taxes (shown per item)');
+select throws_ok('select * from public.order_tax_lines', '42501', null, 'anon cannot read order tax lines');
 select throws_ok('select qr_secret from public.touchpoints', '42501', null, 'anon cannot read touchpoints.qr_secret');
 
 -- ------------------------------------------------------------------ integrity + status guard (as postgres)
@@ -96,6 +116,14 @@ select throws_ok($$insert into public.menu_items (venue_id, category_id, tax_cat
   values ('20000000-0000-4000-8000-00000000000a', '40000000-0000-4000-8000-00000000000a',
           '60000000-0000-4000-8000-00000000000b', 'Cross-venue tax', 100)$$,
   '23503', null, 'a menu item cannot use another venue''s tax category');
+
+select throws_ok($$insert into public.tax_category_taxes (tax_category_id, tax_id, venue_id)
+  values ('60000000-0000-4000-8000-00000000000a', '61000000-0000-4000-8000-00000000000b',
+          '20000000-0000-4000-8000-00000000000a')$$,
+  '23503', null, 'a tax category cannot use another venue''s tax');
+select throws_ok($$insert into public.order_tax_lines (order_id, tax_code, tax_name, rate_bps, base_cents, tax_cents)
+  values ('50000000-0000-4000-8000-0000000000a1', 'PST', 'PST', 1000, 1000, 1)$$,
+  '23514', null, 'an order tax line must match its rate and base');
 
 select throws_ok($$update public.orders set status = 'delivered' where id = '50000000-0000-4000-8000-0000000000a1'$$,
   '23514', null, 'invalid status transition paid -> delivered is rejected');

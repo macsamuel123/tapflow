@@ -8,11 +8,14 @@ import pytest
 from app.domain.cart_rules import CartRuleError, RuleCode, validate_line
 from app.domain.menu import MenuItem, Modifier, ModifierGroup, TaxCategory
 from app.domain.money import Cents
+from app.domain.pricing import Tax
 
 VENUE = UUID("b0000000-0000-4000-8000-000000000001")
 OTHER_VENUE = UUID("b0000000-0000-4000-8000-000000000099")
 CATEGORY = uuid4()
-FOOD_TAX = TaxCategory(id=uuid4(), name="Food", rate_bps=500)
+FOOD_TAX = TaxCategory(
+    id=uuid4(), name="Food", taxes=(Tax(id=uuid4(), code="GST", name="GST", rate_bps=500),)
+)
 
 
 def mod(group_id: UUID, name: str, delta: int = 0, *, in_stock: bool = True) -> Modifier:

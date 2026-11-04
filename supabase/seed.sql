@@ -1,7 +1,8 @@
 -- Local development seed. Applied by `supabase db reset` (make seed). NEVER run against production:
 -- it contains fixed, publicly-known QR secrets and demo users.
 --
--- Demo Bistro — Vancouver, CAD. Tax is per category: Food 5% (500 bps), Alcohol 15% (1500 bps).
+-- Demo Bistro — Vancouver, CAD. Taxes: GST 5% (500 bps), PST 10% (1000 bps).
+-- Tax categories: Food → GST; Alcohol → GST + PST.
 -- Platform fee 3% (300 bps). Fixed UUIDs keep `make qr-urls` and tests deterministic.
 
 -- ---------------------------------------------------------------- staff users (magic link via Inbucket :54324)
@@ -31,9 +32,18 @@ insert into public.staff_members (user_id, venue_id, role) values
   ('a0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001', 'fulfillment');
 
 -- ---------------------------------------------------------------- tax categories
-insert into public.tax_categories (id, venue_id, name, rate_bps) values
-  ('90000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'Food', 500),
-  ('90000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001', 'Alcohol', 1500);
+insert into public.taxes (id, venue_id, code, name, rate_bps) values
+  ('91000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'GST', 'Goods and Services Tax', 500),
+  ('91000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001', 'PST', 'Provincial Sales Tax', 1000);
+
+insert into public.tax_categories (id, venue_id, name) values
+  ('90000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'Food'),
+  ('90000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001', 'Alcohol');
+
+insert into public.tax_category_taxes (tax_category_id, tax_id, venue_id) values
+  ('90000000-0000-4000-8000-000000000001', '91000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001'),
+  ('90000000-0000-4000-8000-000000000002', '91000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001'),
+  ('90000000-0000-4000-8000-000000000002', '91000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001');
 
 -- ---------------------------------------------------------------- touchpoints (dev-only fixed secrets)
 insert into public.touchpoints (id, venue_id, label, kind, qr_secret) values

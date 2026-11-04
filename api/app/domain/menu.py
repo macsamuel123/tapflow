@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.domain.money import Cents
+from app.domain.pricing import Tax
 
 
 @dataclass(frozen=True, slots=True)
 class TaxCategory:
     id: UUID
     name: str
-    rate_bps: int
+    taxes: tuple[Tax, ...]
 
 
 @dataclass(frozen=True, slots=True)

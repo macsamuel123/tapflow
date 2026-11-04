@@ -2,10 +2,10 @@
 
     unit       = item.price + sum(modifier.price_delta)
     line       = unit * quantity
-    subtotal_c = sum(line for lines in tax category c)
-    tax_c      = round_half_up(subtotal_c * rate_c / 10000)     # per category, half-up
-    tax        = sum(tax_c)                                      # summed, not re-rounded
-    subtotal   = sum(subtotal_c)
+    subtotal   = sum(line)
+    base_t     = sum(line for lines taxed by t)              # pre-tax, so never tax on tax
+    tax_t      = round_half_up(base_t * rate_t / 10000)      # per tax, half-up
+    tax        = sum(tax_t)                                  # summed, not re-rounded
     fee        = round_half_up(subtotal * platform_fee_bps / 10000)   # on the pre-tax subtotal
     total      = subtotal + tax + tip                            # prices are tax-exclusive
 
@@ -49,21 +49,30 @@ def line_total(unit: Cents, quantity: int) -> Cents:
 
 
 @dataclass(frozen=True, slots=True)
+class Tax:
+    """One tax of a venue, such as GST or PST."""
+
+    id: UUID
+    code: str
+    name: str
+    rate_bps: int
+
+
+@dataclass(frozen=True, slots=True)
 class TaxableLine:
-    """One priced line, tagged with the tax category it is taxed under."""
+    """One priced line, with the taxes its tax category maps to. No taxes means tax-exempt."""
 
     amount_cents: Cents
-    tax_category_id: UUID
-    tax_category_name: str
-    tax_rate_bps: int
+    taxes: tuple[Tax, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class TaxLine:
-    tax_category_id: UUID
+    tax_id: UUID
+    code: str
     name: str
     rate_bps: int
-    subtotal_cents: Cents
+    base_cents: Cents
     tax_cents: Cents
 
 
@@ -83,36 +92,43 @@ def quote(
     platform_fee_bps: int,
     tip: Cents = ZERO,
 ) -> OrderQuote:
-    subtotals: dict[UUID, int] = {}
-    meta: dict[UUID, tuple[str, int]] = {}
+    subtotal = 0
+    bases: dict[UUID, int] = {}
+    defined: dict[UUID, Tax] = {}
     for line in lines:
         amount = _require_cents("line total", line.amount_cents)
-        if not 0 <= line.tax_rate_bps <= BPS_DENOMINATOR:
-            raise ValueError("tax rate must be between 0 and 10000 bps")
-        known = meta.setdefault(line.tax_category_id, (line.tax_category_name, line.tax_rate_bps))
-        if known != (line.tax_category_name, line.tax_rate_bps):
-            raise ValueError(f"tax category {line.tax_category_id} has conflicting definitions")
-        subtotals[line.tax_category_id] = subtotals.get(line.tax_category_id, 0) + amount
+        subtotal += amount
+        if len({tax.id for tax in line.taxes}) != len(line.taxes):
+            raise ValueError("a line cannot carry the same tax twice")
+        for tax in line.taxes:
+            if not 0 <= tax.rate_bps <= BPS_DENOMINATOR:
+                raise ValueError("tax rate must be between 0 and 10000 bps")
+            if defined.setdefault(tax.id, tax) != tax:
+                raise ValueError(f"tax {tax.id} has conflicting definitions")
+            bases[tax.id] = bases.get(tax.id, 0) + amount
 
+    # Sorted by code so the breakdown does not depend on cart order. Taxes with no taxable
+    # amount are left out, so a food-only cart shows GST alone.
     tax_lines = tuple(
         TaxLine(
-            tax_category_id=cid,
-            name=meta[cid][0],
-            rate_bps=meta[cid][1],
-            subtotal_cents=Cents(sub),
-            tax_cents=apply_bps_round_half_up(Cents(sub), meta[cid][1]),
+            tax_id=tax.id,
+            code=tax.code,
+            name=tax.name,
+            rate_bps=tax.rate_bps,
+            base_cents=Cents(bases[tax.id]),
+            tax_cents=apply_bps_round_half_up(Cents(bases[tax.id]), tax.rate_bps),
         )
-        for cid, sub in subtotals.items()
+        for tax in sorted(defined.values(), key=lambda t: t.code)
+        if bases[tax.id] > 0
     )
-    subtotal = Cents(sum(subtotals.values()))
-    tax = Cents(sum(tl.tax_cents for tl in tax_lines))
+    tax_total = Cents(sum(tl.tax_cents for tl in tax_lines))
     _require_cents("tip", tip)
-    fee = apply_bps_round_half_up(subtotal, platform_fee_bps)
+    fee = apply_bps_round_half_up(Cents(subtotal), platform_fee_bps)
     return OrderQuote(
-        subtotal_cents=subtotal,
-        tax_cents=tax,
+        subtotal_cents=Cents(subtotal),
+        tax_cents=tax_total,
         tip_cents=tip,
         platform_fee_cents=fee,
-        total_cents=Cents(subtotal + tax + tip),
+        total_cents=Cents(subtotal + tax_total + tip),
         tax_lines=tax_lines,
     )

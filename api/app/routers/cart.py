@@ -100,12 +100,7 @@ def _line_out(
         available=True,
         problem=None,
     )
-    taxable = TaxableLine(
-        amount_cents=v.line_total_cents,
-        tax_category_id=v.item.tax_category.id,
-        tax_category_name=v.item.tax_category.name,
-        tax_rate_bps=v.item.tax_category.rate_bps,
-    )
+    taxable = TaxableLine(amount_cents=v.line_total_cents, taxes=v.item.tax_category.taxes)
     return out, taxable
 
 
@@ -136,9 +131,10 @@ async def _cart_response(conn: DbConn, session: DinerSession) -> CartResponse:
         subtotal_cents=q.subtotal_cents,
         tax_breakdown=[
             TaxLineOut(
+                code=tl.code,
                 name=tl.name,
                 rate_bps=tl.rate_bps,
-                subtotal_cents=tl.subtotal_cents,
+                base_cents=tl.base_cents,
                 tax_cents=tl.tax_cents,
             )
             for tl in q.tax_lines

@@ -65,11 +65,13 @@ restaurant_app/
 
 ## 3. Data model
 
-Touchpoints: `venues`, `staff_members`, `touchpoints`, `menu_categories`, `menu_items`, `modifier_groups`, `modifiers`, `touchpoint_sessions`, `cart_items`, `orders`, `order_items`, `stripe_events`, `ticket_counters`. (`chat_messages` and `ai_audit_log` are Phase 2.)
+Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`, `tax_category_taxes`, `menu_categories`, `menu_items`, `modifier_groups`, `modifiers`, `touchpoint_sessions`, `cart_items`, `orders`, `order_items`, `order_tax_lines`, `stripe_events`, `ticket_counters`. (`chat_messages` and `ai_audit_log` are Phase 2.)
 
 | Detail | Why |
 |---|---|
-| `venues.currency` default `'CAD'`, `timezone` default `'America/Vancouver'`, `tax_rate_bps`, `platform_fee_bps` default 300 | Launch market is BC. Per-tenant overrides. |
+| `venues.currency` default `'CAD'`, `timezone` default `'America/Vancouver'`, `platform_fee_bps` default 300 | Launch market is BC. Per-tenant overrides. |
+| `taxes(venue_id, code, name, rate_bps)`, `tax_category_taxes` maps a category to a set of taxes; `code` is free text, seed GST 5% and PST 10%, Food → {GST}, Alcohol → {GST, PST} | Rates live only on `taxes`. A venue outside BC can define its own codes (setup UI in M4). Composite FKs stop a category using another venue's tax. |
+| `order_tax_lines(order_id, tax_code, tax_name, rate_bps, base_cents, tax_cents)`; `order_items.tax_category_name_snapshot` and `tax_codes_snapshot` | Each order stores one row per tax so receipts and refunds reconcile. Immutable, like `order_items`. |
 | `venue_id` on `modifier_groups` and `modifiers` (denormalized). **Composite FKs** `(parent_id, venue_id)` → `parent(id, venue_id)` on items→categories, groups→items, modifiers→groups, orders/sessions→touchpoints. | RLS without joins; Realtime filter `venue_id=eq.X`. The DB rejects cross-tenant links outright (stronger and simpler than a trigger). |
 | `orders_status_guard` trigger | A second, DB-level enforcement of the status machine. It also stamps `*_at` timestamps. |
 | `sort_order` on categories, items, groups and modifiers; `updated_at` on mutable touchpoints | Stable ordering; cache busting |
@@ -98,10 +100,11 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `menu_categories`, `menu_
 
 **Pricing** (integer cents, pure functions in `domain/pricing.py`):
 - `line = (item.price + Σ modifier.delta) × qty`; `subtotal = Σ lines`
-- **Tax is per tax category.** Each menu item belongs to a `tax_category` (name, `rate_bps`; seed: Food 500, Alcohol 1500). For each category: `tax_c = round_half_up(subtotal_c × rate_c / 10000)`, on that category's subtotal. Then `tax = Σ tax_c`, summed, not re-rounded. The cart returns a `tax_breakdown` list.
+- **Tax is per tax, not per category.** Each menu item belongs to a `tax_category`, which maps to a set of taxes. For tax `t`: `base_t` = sum of line amounts taxed by `t`; `tax_t = round_half_up(base_t × rate_t / 10000)`. Then `tax = Σ tax_t`, summed, not re-rounded. Tax is never applied to tax: GST and PST both use the pre-tax price. So Alcohol $10.00 → GST 50¢ + PST 100¢, Food $10.00 → GST 50¢.
+- The cart returns `tax_breakdown`, one entry per tax (`code`, `name`, `rate_bps`, `base_cents`, `tax_cents`) sorted by code, and shows lines like `GST 5%`. Taxes with a zero base are left out, so a food-only cart shows GST alone.
 - `platform_fee = round_half_up(subtotal × platform_fee_bps / 10000)`, on the pre-tax subtotal
 - `total = subtotal + tax + tip`. Prices are tax-exclusive. Tips are added but never taxed. `round_half_up = (n*bps + 5000) // 10000`.
-- Orders must persist the per-category tax breakdown (not only `tax_cents`) so receipts and refunds reconcile. `order_items` already snapshots `tax_category_name_snapshot` and `tax_rate_bps_snapshot`. The breakdown table lands with checkout in M3.
+- Orders persist their breakdown in `order_tax_lines` at checkout (M3), not only `tax_cents`.
 
 **Checkout.** Requires a verified session, a non-empty cart, `stripe_charges_enabled`, and a stock re-check. In one transaction it creates a `pending_payment` order with snapshots. It then creates the PaymentIntent with `automatic_payment_methods`, `application_fee_amount`, `transfer_data.destination`, `metadata.order_id`, and idempotency key = order id. Each session has at most one pending order. **On re-checkout**:
 - If the existing PaymentIntent is `requires_payment_method` or `requires_confirmation`, cancel it and the old order, then create new ones.
@@ -163,7 +166,7 @@ Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `
 | Tips | In M3: tip selection at checkout (`tip_cents`, untaxed, included in the PaymentIntent). Default 0. |
 | Offline PWA | Manifest only. |
 | Item 86'd between checkout and payment | Payment succeeds and the ticket shows a warning badge. Fulfillment cancels it and refunds via the Stripe Dashboard. |
-| Tax | Per tax category, not one rate per venue (see §4 Pricing). Seed: Food 5%, Alcohol 15%, plus two alcoholic items. Real BC rules differ (GST 5% on food, plus 10% PST on liquor). Model those as categories when a venue needs them. |
+| Tax | Per tax, with categories mapping to a set of taxes (see §4 Pricing). Seed matches BC: GST 5% on food, GST 5% + PST 10% on liquor. |
 
 ## 6. Environment variables
 

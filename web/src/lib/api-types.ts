@@ -16,7 +16,9 @@ export type ModifierGroup = {
   modifiers: Modifier[];
 };
 
-export type TaxCategory = { name: string; rate_bps: number };
+export type Tax = { code: string; name: string; rate_bps: number };
+
+export type TaxCategory = { name: string; taxes: Tax[] };
 
 export type MenuItem = {
   id: string;
@@ -67,9 +69,10 @@ export type CartLine = {
 };
 
 export type TaxLine = {
+  code: string;
   name: string;
   rate_bps: number;
-  subtotal_cents: number;
+  base_cents: number;
   tax_cents: number;
 };
 

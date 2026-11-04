@@ -19,9 +19,11 @@ async def test_menu_lists_seed_in_order(client: httpx.AsyncClient) -> None:
     items = [i for c in body["categories"] for i in c["items"]]
     assert len(items) >= 20
     burger = next(i for i in items if i["name"] == "Bistro Burger")
-    assert burger["tax_category"] == {"name": "Food", "rate_bps": 500}
+    gst = {"code": "GST", "name": "Goods and Services Tax", "rate_bps": 500}
+    pst = {"code": "PST", "name": "Provincial Sales Tax", "rate_bps": 1000}
+    assert burger["tax_category"] == {"name": "Food", "taxes": [gst]}
     lager = next(i for i in items if i["name"] == "House Lager")
-    assert lager["tax_category"] == {"name": "Alcohol", "rate_bps": 1500}
+    assert lager["tax_category"] == {"name": "Alcohol", "taxes": [gst, pst]}
     assert burger["price_cents"] == 2200
     assert [g["name"] for g in burger["modifier_groups"]] == ["Doneness", "Add-ons"]
     doneness, addons = burger["modifier_groups"]

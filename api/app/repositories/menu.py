@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from app.db import Conn
 from app.domain.menu import MenuCategory, MenuItem, Modifier, ModifierGroup, TaxCategory
 from app.domain.money import Cents
+from app.domain.pricing import Tax
 
 
 async def _fetch(conn: Conn, sql: str, params: Sequence[object]) -> list[dict[str, Any]]:
@@ -30,7 +31,7 @@ async def load_items(
         conn,
         "select i.id, i.venue_id, i.category_id, i.name, i.description, i.price_cents, "
         "i.image_url, i.ingredients, i.allergens, i.dietary_tags, i.in_stock, "
-        "tc.id as tax_category_id, tc.name as tax_category_name, tc.rate_bps as tax_rate_bps "
+        "tc.id as tax_category_id, tc.name as tax_category_name "
         "from public.menu_items i "
         "join public.menu_categories c on c.id = i.category_id "
         "join public.tax_categories tc on tc.id = i.tax_category_id "
@@ -41,6 +42,19 @@ async def load_items(
     if not items:
         return []
     ids = [row["id"] for row in items]
+
+    tax_rows = await _fetch(
+        conn,
+        "select ctt.tax_category_id, t.id, t.code, t.name, t.rate_bps "
+        "from public.tax_category_taxes ctt join public.taxes t on t.id = ctt.tax_id "
+        "where ctt.venue_id = %s order by t.code",
+        [venue_id],
+    )
+    taxes_by_category: dict[UUID, list[Tax]] = defaultdict(list)
+    for t in tax_rows:
+        taxes_by_category[t["tax_category_id"]].append(
+            Tax(id=t["id"], code=t["code"], name=t["name"], rate_bps=t["rate_bps"])
+        )
 
     groups = await _fetch(
         conn,
@@ -96,7 +110,7 @@ async def load_items(
             tax_category=TaxCategory(
                 id=i["tax_category_id"],
                 name=i["tax_category_name"],
-                rate_bps=i["tax_rate_bps"],
+                taxes=tuple(taxes_by_category[i["tax_category_id"]]),
             ),
             groups=tuple(groups_by_item[i["id"]]),
         )

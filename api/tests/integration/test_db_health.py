@@ -34,10 +34,12 @@ def test_seed_loaded() -> None:
         ).fetchone()
         assert row == ("CAD", "America/Vancouver")
         rates = conn.execute(
-            "select tc.name, tc.rate_bps from public.tax_categories tc "
+            "select tc.name, t.code, t.rate_bps from public.tax_categories tc "
+            "join public.tax_category_taxes ctt on ctt.tax_category_id = tc.id "
+            "join public.taxes t on t.id = ctt.tax_id "
             "join public.venues v on v.id = tc.venue_id where v.slug = 'demo-bistro' "
-            "order by tc.name"
+            "order by tc.name, t.code"
         ).fetchall()
-        assert rates == [("Alcohol", 1500), ("Food", 500)]
+        assert rates == [("Alcohol", "GST", 500), ("Alcohol", "PST", 1000), ("Food", "GST", 500)]
         n_items = conn.execute("select count(*) from public.menu_items").fetchone()
         assert n_items is not None and n_items[0] >= 20

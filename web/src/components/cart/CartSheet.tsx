@@ -13,11 +13,11 @@ type Props = {
   onRemove: (lineId: string) => void;
 };
 
-function taxLabel(name: string, bps: number): string {
+function taxLabel(code: string, bps: number): string {
   // 500 bps → "5%", 1250 → "12.5%": string formatting of an integer, no float math.
   const whole = (bps - (bps % 100)) / 100;
   const frac = String(bps % 100).padStart(2, "0").replace(/0+$/, "");
-  return `${name} ${whole}${frac ? `.${frac}` : ""}%`;
+  return `${code} ${whole}${frac ? `.${frac}` : ""}%`;
 }
 
 export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: Props) {
@@ -114,8 +114,8 @@ export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: 
             <span className="tabular-nums">{formatCents(cart.subtotal_cents, c)}</span>
           </div>
           {cart.tax_breakdown.map((t) => (
-            <div key={t.name} className="flex justify-between text-gray-600">
-              <span>{taxLabel(t.name, t.rate_bps)}</span>
+            <div key={t.code} className="flex justify-between text-gray-600">
+              <span>{taxLabel(t.code, t.rate_bps)}</span>
               <span className="tabular-nums">{formatCents(t.tax_cents, c)}</span>
             </div>
           ))}

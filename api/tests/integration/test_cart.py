@@ -97,13 +97,37 @@ async def test_realistic_cart_priced_server_side_with_gst(
         2888,
     )
     assert c["currency"] == "CAD"
-    # Both lines are Food (5%): one category, rounded on its subtotal.
+    # Both lines are Food: GST only, and PST is hidden because nothing in the cart is taxed by it.
     assert c["tax_breakdown"] == [
-        {"name": "Food", "rate_bps": 500, "subtotal_cents": 2750, "tax_cents": 138}
+        {
+            "code": "GST",
+            "name": "Goods and Services Tax",
+            "rate_bps": 500,
+            "base_cents": 2750,
+            "tax_cents": 138,
+        }
     ]
     assert c["item_count"] == 3
     assert c["can_checkout"] is True
     assert "platform_fee" not in res.text
+
+
+async def test_mixed_cart_shows_one_line_per_tax(
+    client: httpx.AsyncClient, session: dict[str, Any], db: Conn
+) -> None:
+    row = await (
+        await db.execute("select id from public.menu_items where name = 'House Lager'")
+    ).fetchone()
+    assert row is not None
+    await add(client, session, AMERICANO)  # Food, $4.00
+    await add(client, session, row[0], quantity=2)  # Alcohol, $6.50 x2 = $13.00
+    c = await cart(client, session)
+    # GST covers both lines, PST only the alcohol. Neither is charged on the other.
+    assert [(t["code"], t["base_cents"], t["tax_cents"]) for t in c["tax_breakdown"]] == [
+        ("GST", 1700, 85),
+        ("PST", 1300, 130),
+    ]
+    assert (c["subtotal_cents"], c["tax_cents"], c["total_cents"]) == (1700, 215, 1915)
 
 
 async def test_cart_reprices_from_current_db_prices(
@@ -197,8 +221,7 @@ async def test_modifier_of_another_venue_rejected(
         (cid, rid),
     )
     await db.execute(
-        "insert into public.tax_categories (id, venue_id, name, rate_bps) "
-        "values (%s, %s, 'Food', 500)",
+        "insert into public.tax_categories (id, venue_id, name) values (%s, %s, 'Food')",
         (tcid, rid),
     )
     await db.execute(

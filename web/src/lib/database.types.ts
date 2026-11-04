@@ -137,14 +137,14 @@ isOneToOne: false
                   ]
                 },"order_items": {
                   Row: {
-                    "id": string,"item_id": string | null,"line_total_cents": number,"modifiers_snapshot": NonNullable<Json>,"name_snapshot": string,"notes": string,"order_id": string,"quantity": number,"tax_category_name_snapshot": string,"tax_rate_bps_snapshot": number,"unit_price_cents": number
+                    "id": string,"item_id": string | null,"line_total_cents": number,"modifiers_snapshot": NonNullable<Json>,"name_snapshot": string,"notes": string,"order_id": string,"quantity": number,"tax_category_name_snapshot": string,"tax_codes_snapshot": (string)[],"unit_price_cents": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "id"?: string,"item_id"?: string | null,"line_total_cents": number,"modifiers_snapshot"?: NonNullable<Json>,"name_snapshot": string,"notes"?: string,"order_id": string,"quantity": number,"tax_category_name_snapshot": string,"tax_rate_bps_snapshot": number,"unit_price_cents": number
+                    "id"?: string,"item_id"?: string | null,"line_total_cents": number,"modifiers_snapshot"?: NonNullable<Json>,"name_snapshot": string,"notes"?: string,"order_id": string,"quantity": number,"tax_category_name_snapshot": string,"tax_codes_snapshot": (string)[],"unit_price_cents": number
                   }
                   Update: {
-                    "id"?: string,"item_id"?: string | null,"line_total_cents"?: number,"modifiers_snapshot"?: NonNullable<Json>,"name_snapshot"?: string,"notes"?: string,"order_id"?: string,"quantity"?: number,"tax_category_name_snapshot"?: string,"tax_rate_bps_snapshot"?: number,"unit_price_cents"?: number
+                    "id"?: string,"item_id"?: string | null,"line_total_cents"?: number,"modifiers_snapshot"?: NonNullable<Json>,"name_snapshot"?: string,"notes"?: string,"order_id"?: string,"quantity"?: number,"tax_category_name_snapshot"?: string,"tax_codes_snapshot"?: (string)[],"unit_price_cents"?: number
                   }
                   Relationships: [
                     {
@@ -155,6 +155,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     },{
       foreignKeyName: "order_items_order_id_fkey"
+      columns: ["order_id"]
+isOneToOne: false
+      referencedRelation: "orders"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"order_tax_lines": {
+                  Row: {
+                    "base_cents": number,"order_id": string,"rate_bps": number,"tax_cents": number,"tax_code": string,"tax_name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "base_cents": number,"order_id": string,"rate_bps": number,"tax_cents": number,"tax_code": string,"tax_name": string
+                  }
+                  Update: {
+                    "base_cents"?: number,"order_id"?: string,"rate_bps"?: number,"tax_cents"?: number,"tax_code"?: string,"tax_name"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "order_tax_lines_order_id_fkey"
       columns: ["order_id"]
 isOneToOne: false
       referencedRelation: "orders"
@@ -229,18 +249,64 @@ isOneToOne: false
                   ]
                 },"tax_categories": {
                   Row: {
-                    "created_at": string,"id": string,"name": string,"rate_bps": number,"updated_at": string,"venue_id": string
+                    "created_at": string,"id": string,"name": string,"updated_at": string,"venue_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"name": string,"rate_bps": number,"updated_at"?: string,"venue_id": string
+                    "created_at"?: string,"id"?: string,"name": string,"updated_at"?: string,"venue_id": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"name"?: string,"rate_bps"?: number,"updated_at"?: string,"venue_id"?: string
+                    "created_at"?: string,"id"?: string,"name"?: string,"updated_at"?: string,"venue_id"?: string
                   }
                   Relationships: [
                     {
       foreignKeyName: "tax_categories_venue_id_fkey"
+      columns: ["venue_id"]
+isOneToOne: false
+      referencedRelation: "venues"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"tax_category_taxes": {
+                  Row: {
+                    "tax_category_id": string,"tax_id": string,"venue_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "tax_category_id": string,"tax_id": string,"venue_id": string
+                  }
+                  Update: {
+                    "tax_category_id"?: string,"tax_id"?: string,"venue_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "tax_category_taxes_tax_category_id_venue_id_fkey"
+      columns: ["tax_category_id","venue_id"]
+isOneToOne: false
+      referencedRelation: "tax_categories"
+      referencedColumns: ["id","venue_id"]
+    },{
+      foreignKeyName: "tax_category_taxes_tax_id_venue_id_fkey"
+      columns: ["tax_id","venue_id"]
+isOneToOne: false
+      referencedRelation: "taxes"
+      referencedColumns: ["id","venue_id"]
+    }
+                  ]
+                },"taxes": {
+                  Row: {
+                    "code": string,"created_at": string,"id": string,"name": string,"rate_bps": number,"updated_at": string,"venue_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"created_at"?: string,"id"?: string,"name": string,"rate_bps": number,"updated_at"?: string,"venue_id": string
+                  }
+                  Update: {
+                    "code"?: string,"created_at"?: string,"id"?: string,"name"?: string,"rate_bps"?: number,"updated_at"?: string,"venue_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "taxes_venue_id_fkey"
       columns: ["venue_id"]
 isOneToOne: false
       referencedRelation: "venues"
