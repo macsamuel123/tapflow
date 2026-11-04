@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { reachSetupStep } from "./helpers";
+import { reachSetupStep, skipFirstItems } from "./helpers";
 
 test("@saas setup blocks continue when neither tables nor pickup is chosen", async ({ page }) => {
   await reachSetupStep(page, "breweries", "Harbour Taproom");
   await page.getByRole("group", { name: "Do guests sit at tables or spots?" }).getByText("No").click();
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("Choose at least one: tables or spots, or a pickup point.");
   await expect(page.getByRole("heading", { name: "How do guests get their order?" })).toBeVisible();
@@ -15,7 +15,7 @@ for (const bad of ["0", "501", "-3", "12.5", "abc", ""]) {
   test(`@saas setup rejects a table count of "${bad}"`, async ({ page }) => {
     await reachSetupStep(page, "breweries", "Harbour Taproom");
     await page.getByLabel("How many?").fill(bad);
-    await page.getByRole("button", { name: "Create my QR codes" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
 
     await expect(page.getByRole("main").getByRole("alert")).toHaveText("Enter a whole number from 1 to 500.");
     await expect(page).not.toHaveURL(/ready/);
@@ -26,7 +26,7 @@ for (const good of ["1", "500"]) {
   test(`@saas setup accepts a table count of ${good}`, async ({ page }) => {
     await reachSetupStep(page, "breweries", "Harbour Taproom");
     await page.getByLabel("How many?").fill(good);
-    await page.getByRole("button", { name: "Create my QR codes" }).click();
+    await skipFirstItems(page);
     await expect(page.getByRole("heading", { name: "Your QR codes are ready" })).toBeVisible();
   });
 }
@@ -69,7 +69,7 @@ test("@saas /dashboard without a mock session goes to login", async ({ page }) =
 
 test("@saas passwords never reach browser storage", async ({ page }) => {
   await reachSetupStep(page, "breweries", "Harbour Taproom");
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await skipFirstItems(page);
   await expect(page.getByRole("heading", { name: "Your QR codes are ready" })).toBeVisible();
   const stored = await page.evaluate(() => JSON.stringify([{ ...localStorage }, { ...sessionStorage }]));
   expect(stored).toContain("Harbour Taproom");

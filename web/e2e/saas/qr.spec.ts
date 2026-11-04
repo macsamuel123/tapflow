@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 import jsQR from "jsqr";
 import { PNG } from "pngjs";
-import { reachSetupStep } from "./helpers";
+import { reachSetupStep, skipFirstItems } from "./helpers";
 
 test("@saas a generated QR decodes to the real link format", async ({ page }) => {
   await reachSetupStep(page, "breweries", "Harbour Taproom");
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await skipFirstItems(page);
 
   const qr = page.getByTestId("qr-code").first();
   await expect(qr).toBeVisible();
@@ -22,7 +22,7 @@ test("@saas a generated QR decodes to the real link format", async ({ page }) =>
 test("@saas 500 codes run onto extra pages", async ({ page }) => {
   await reachSetupStep(page, "breweries", "Harbour Taproom");
   await page.getByLabel("How many?").fill("500");
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await skipFirstItems(page);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download printable PDF" }).click();

@@ -26,6 +26,20 @@ export async function reachSetupStep(page: Page, industry: string, venueName: st
   await expect(page.getByRole("heading", { name: "How do guests get their order?" })).toBeVisible();
 }
 
+export async function skipFirstItems(page: Page) {
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Add your first items" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+}
+
+export async function logIn(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("tester@example.test");
+  await page.getByLabel("Password").fill("anything");
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+}
+
 /** Follows a bottom-nav link, opening the More menu first when the page lives there. */
 export async function openPage(page: Page, label: string, heading: string) {
   const nav = page.getByRole("navigation", { name: "Dashboard mobile" });

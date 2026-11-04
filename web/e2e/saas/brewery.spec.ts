@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
-import { expectNoSideScroll, fillAccount, fillVenue, openPage } from "./helpers";
+import { expectNoSideScroll, fillAccount, fillVenue, openPage, skipFirstItems } from "./helpers";
 
 test("@saas brewery path: landing to every dashboard page", async ({ page }) => {
   await page.goto("/");
@@ -23,7 +23,7 @@ test("@saas brewery path: landing to every dashboard page", async ({ page }) => 
   await expect(page.getByLabel("Pickup point name")).toHaveValue("Pickup counter");
   await expect(page.getByRole("status")).toHaveText("You'll get 12 table QR codes + 1 pickup QR code.");
   await expectNoSideScroll(page);
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await skipFirstItems(page);
 
   await expect(page.getByRole("heading", { name: "Your QR codes are ready" })).toBeVisible();
   await expect(page.getByText("13 codes for Harbour Taproom")).toBeVisible();

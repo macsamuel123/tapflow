@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { fillAccount, fillVenue, openPage } from "./helpers";
+import { pngFile } from "./menu-helpers";
+
+const CSV = "category,name,price,tax_type\nChecks,From CSV,4.00,food\n";
+import { fillAccount, fillVenue, openPage, skipFirstItems } from "./helpers";
 
 test("@saas demo mode makes no API or third-party requests", async ({ page, baseURL }) => {
   const origin = new URL(baseURL!).origin;
@@ -15,7 +18,7 @@ test("@saas demo mode makes no API or third-party requests", async ({ page, base
   await page.getByRole("button", { name: "Continue" }).click();
   await fillAccount(page);
   await fillVenue(page, { venueName: "Harbour Taproom" });
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await skipFirstItems(page);
   await page.getByRole("button", { name: "Download printable PDF" }).click();
   await page.getByRole("link", { name: "Continue to dashboard" }).click();
   for (const [label, heading] of [
@@ -30,6 +33,22 @@ test("@saas demo mode makes no API or third-party requests", async ({ page, base
   }
   await openPage(page, "Orders", "Orders");
   await page.getByRole("button", { name: "Accept" }).first().click();
+
+  await openPage(page, "Menu", "Menu");
+  await page.getByRole("button", { name: "Add item" }).click();
+  const editor = page.getByRole("dialog");
+  await editor.getByLabel("Item name").fill("Network check");
+  await editor.getByLabel("Price").fill("5.00");
+  await editor.getByLabel("Category").fill("Checks");
+  await editor.getByLabel("Upload photo").setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: pngFile(40, 40) });
+  await expect(editor.getByAltText("Item preview")).toBeVisible();
+  await editor.getByRole("button", { name: "Save item" }).click();
+  await expect(page.getByTestId("item-photo")).toBeVisible();
+  await page.getByRole("button", { name: "Upload CSV" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Download template" }).click();
+  await page.getByLabel("Choose CSV file").setInputFiles({ name: "m.csv", mimeType: "text/csv", buffer: Buffer.from(CSV) });
+  await page.getByRole("button", { name: /^Import 1 item/ }).click();
+  await expect(page.getByText("Imported 1 item, 0 skipped")).toBeVisible();
   await page.goto("/login");
   await page.goto("/forgot-password");
 

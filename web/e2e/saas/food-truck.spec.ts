@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { openPage, reachSetupStep } from "./helpers";
+import { openPage, reachSetupStep, skipFirstItems } from "./helpers";
 
 test("@saas food truck path: pickup only", async ({ page }) => {
   await reachSetupStep(page, "food-trucks", "Taco Window");
 
   await expect(page.getByLabel("How many?")).toHaveCount(0);
   await expect(page.getByRole("status")).toHaveText("You'll get 1 pickup QR code.");
-  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await skipFirstItems(page);
 
   await expect(page.getByRole("heading", { name: "Your QR codes are ready" })).toBeVisible();
   await expect(page.getByText("1 code for Taco Window")).toBeVisible();
