@@ -7,6 +7,13 @@ from app.domain.money import Cents
 
 
 @dataclass(frozen=True, slots=True)
+class TaxCategory:
+    id: UUID
+    name: str
+    rate_bps: int
+
+
+@dataclass(frozen=True, slots=True)
 class Modifier:
     id: UUID
     group_id: UUID
@@ -29,7 +36,7 @@ class ModifierGroup:
 @dataclass(frozen=True, slots=True)
 class MenuItem:
     id: UUID
-    restaurant_id: UUID
+    venue_id: UUID
     category_id: UUID
     name: str
     description: str
@@ -39,6 +46,7 @@ class MenuItem:
     allergens: tuple[str, ...]
     dietary_tags: tuple[str, ...]
     in_stock: bool
+    tax_category: TaxCategory
     groups: tuple[ModifierGroup, ...]
 
 

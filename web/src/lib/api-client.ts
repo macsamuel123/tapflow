@@ -42,12 +42,12 @@ async function request<T>(path: string, init: RequestInit & { sessionToken?: str
 }
 
 export function getMenu(slug: string): Promise<Menu> {
-  return request<Menu>(`/restaurants/${encodeURIComponent(slug)}/menu`);
+  return request<Menu>(`/venues/${encodeURIComponent(slug)}/menu`);
 }
 
 export function createSession(body: {
-  restaurant_slug: string;
-  table_id: string | null;
+  venue_slug: string;
+  touchpoint_id: string | null;
   token: string | null;
 }): Promise<CreatedSession> {
   return request<CreatedSession>("/sessions", { method: "POST", body: JSON.stringify(body) });

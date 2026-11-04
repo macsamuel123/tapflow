@@ -22,7 +22,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await pool.close()
 
-    app = FastAPI(title="Restaurant Ordering API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="TapFlow API", version="0.1.0", lifespan=lifespan)
     app.state.settings = cfg
     # The web app normally calls the API through the Next.js /api rewrite (same origin);
     # CORS only matters for direct calls during development.

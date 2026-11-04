@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Diner session tokens (HMAC key). Must be overridden outside local dev.
     session_secret: SecretStr = SecretStr("dev-only-session-secret-change-me")
 
-    # Default platform fee for newly created restaurants, in basis points.
+    # Default platform fee for newly created venues, in basis points.
     platform_fee_bps: int = Field(default=300, ge=0, le=10_000)
 
     # Supabase

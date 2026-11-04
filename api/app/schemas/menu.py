@@ -19,6 +19,11 @@ class ModifierGroupOut(Outbound):
     modifiers: list[ModifierOut]
 
 
+class TaxCategoryOut(Outbound):
+    name: str
+    rate_bps: int
+
+
 class MenuItemOut(Outbound):
     id: UUID
     name: str
@@ -29,6 +34,7 @@ class MenuItemOut(Outbound):
     allergens: list[str]
     dietary_tags: list[str]
     in_stock: bool
+    tax_category: TaxCategoryOut
     modifier_groups: list[ModifierGroupOut]
 
 
@@ -38,13 +44,12 @@ class MenuCategoryOut(Outbound):
     items: list[MenuItemOut]
 
 
-class RestaurantOut(Outbound):
+class VenueOut(Outbound):
     slug: str
     name: str
     currency: str
-    tax_rate_bps: int
 
 
 class MenuResponse(Outbound):
-    restaurant: RestaurantOut
+    venue: VenueOut
     categories: list[MenuCategoryOut]

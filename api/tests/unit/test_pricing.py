@@ -1,16 +1,41 @@
-"""Pricing in integer cents (CLAUDE.md invariant 1). GST is 5% = 500 bps, half-up."""
+"""Pricing in integer cents (CLAUDE.md invariant 1). Tax is per category, rounded half-up.
+
+Seed categories: Food 5% (500 bps), Alcohol 15% (1500 bps); platform fee 3% (300 bps)."""
+
+from uuid import UUID
 
 import pytest
 
 from app.domain.money import Cents
-from app.domain.pricing import line_total, quote, unit_price
+from app.domain.pricing import TaxableLine, line_total, quote, unit_price
 
-GST_BPS = 500
+FOOD = UUID("90000000-0000-4000-8000-000000000001")
+ALCOHOL = UUID("90000000-0000-4000-8000-000000000002")
+FOOD_BPS = 500
+ALCOHOL_BPS = 1500
 FEE_BPS = 300
 
 
 def c(n: int) -> Cents:
     return Cents(n)
+
+
+def food(amount: int) -> TaxableLine:
+    return TaxableLine(
+        amount_cents=c(amount),
+        tax_category_id=FOOD,
+        tax_category_name="Food",
+        tax_rate_bps=FOOD_BPS,
+    )
+
+
+def alcohol(amount: int) -> TaxableLine:
+    return TaxableLine(
+        amount_cents=c(amount),
+        tax_category_id=ALCOHOL,
+        tax_category_name="Alcohol",
+        tax_rate_bps=ALCOHOL_BPS,
+    )
 
 
 # ---------------------------------------------------------------- unit + line
@@ -42,7 +67,7 @@ def test_line_total_rejects_quantity_out_of_range(qty: int) -> None:
         line_total(c(100), qty)
 
 
-# ---------------------------------------------------------------- GST rounding (half-up)
+# ---------------------------------------------------------------- tax rounding (half-up)
 
 
 @pytest.mark.parametrize(
@@ -62,57 +87,96 @@ def test_line_total_rejects_quantity_out_of_range(qty: int) -> None:
         (1999999, 100000),  # 99999.95 -> 100000
     ],
 )
-def test_gst_is_5_percent_rounded_half_up(subtotal: int, tax: int) -> None:
-    q = quote([c(subtotal)], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
+def test_food_tax_is_5_percent_rounded_half_up(subtotal: int, tax: int) -> None:
+    q = quote([food(subtotal)], platform_fee_bps=FEE_BPS)
     assert q.tax_cents == tax
     assert q.total_cents == subtotal + tax
 
 
-def test_tax_is_computed_on_the_order_subtotal_not_per_line() -> None:
+def test_tax_is_computed_on_the_category_subtotal_not_per_line() -> None:
     # Per line: 10.10 * 5% = 0.505 -> 0.51, twice = 1.02. On the subtotal: 20.20 * 5% = 1.01.
-    q = quote([c(1010), c(1010)], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
+    q = quote([food(1010), food(1010)], platform_fee_bps=FEE_BPS)
     assert q.subtotal_cents == 2020
     assert q.tax_cents == 101
 
 
-def test_realistic_cart() -> None:
-    # Truffle Fries, Large ($11.00 + $4.00) x1 and Latte, Oat milk ($5.50 + $0.75) x2.
+def test_each_category_rounds_on_its_own_then_sums() -> None:
+    # Food 0.10 * 5% = 0.005 -> 0.01. Alcohol 0.10 * 15% = 0.015 -> 0.02. Sum 0.03.
+    q = quote([food(10), alcohol(10)], platform_fee_bps=FEE_BPS)
+    assert [(tl.name, tl.subtotal_cents, tl.tax_cents) for tl in q.tax_lines] == [
+        ("Food", 10, 1),
+        ("Alcohol", 10, 2),
+    ]
+    assert q.tax_cents == 3
+    assert q.subtotal_cents == 20
+
+
+def test_mixed_cart_priced_per_category() -> None:
+    # Food: Truffle Fries Large $15.00 + Latte Oat $6.25 x2 = $27.50 -> tax 1.375 -> 138.
+    # Alcohol: House Lager $6.50 x2 = $13.00 -> tax 1.95 -> 195 (exact).
     fries = line_total(unit_price(c(1100), [c(400)]), 1)
     lattes = line_total(unit_price(c(550), [c(75)]), 2)
-    q = quote([fries, lattes], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
-    assert (q.subtotal_cents, q.tax_cents, q.tip_cents, q.total_cents) == (2750, 138, 0, 2888)
-    # 3% platform fee on the pre-tax subtotal: 82.50 -> 83.
-    assert q.platform_fee_cents == 83
+    lager = line_total(unit_price(c(650), []), 2)
+    q = quote(
+        [
+            TaxableLine(fries, FOOD, "Food", FOOD_BPS),
+            TaxableLine(lattes, FOOD, "Food", FOOD_BPS),
+            TaxableLine(lager, ALCOHOL, "Alcohol", ALCOHOL_BPS),
+        ],
+        platform_fee_bps=FEE_BPS,
+    )
+    assert (q.subtotal_cents, q.tax_cents, q.tip_cents, q.total_cents) == (4050, 333, 0, 4383)
+    assert [(tl.name, tl.subtotal_cents, tl.tax_cents) for tl in q.tax_lines] == [
+        ("Food", 2750, 138),
+        ("Alcohol", 1300, 195),
+    ]
+    # 3% platform fee on the pre-tax subtotal: 4050 * 300 / 10000 = 121.5 -> 122 cents (half-up).
+    assert q.platform_fee_cents == 122
 
 
 def test_platform_fee_is_on_pre_tax_subtotal_and_not_added_to_total() -> None:
-    q = quote([c(10000)], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
+    q = quote([food(10000)], platform_fee_bps=FEE_BPS)
     assert q.platform_fee_cents == 300  # 3% of $100.00, not of $105.00
     assert q.total_cents == 10500
 
 
 def test_empty_cart_is_all_zero() -> None:
-    q = quote([], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
+    q = quote([], platform_fee_bps=FEE_BPS)
     assert (q.subtotal_cents, q.tax_cents, q.platform_fee_cents, q.total_cents) == (0, 0, 0, 0)
+    assert q.tax_lines == ()
 
 
 def test_tip_is_added_to_total_but_not_taxed() -> None:
-    q = quote([c(1000)], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS, tip=c(200))
+    q = quote([food(1000)], platform_fee_bps=FEE_BPS, tip=c(200))
     assert (q.tax_cents, q.tip_cents, q.total_cents) == (50, 200, 1250)
 
 
-def test_zero_tax_rate() -> None:
-    q = quote([c(1234)], tax_rate_bps=0, platform_fee_bps=FEE_BPS)
+def test_zero_rate_category() -> None:
+    q = quote(
+        [TaxableLine(c(1234), FOOD, "Zero-rated", 0)],
+        platform_fee_bps=FEE_BPS,
+    )
     assert (q.tax_cents, q.total_cents) == (0, 1234)
+
+
+def test_same_category_must_have_one_definition() -> None:
+    with pytest.raises(ValueError):
+        quote(
+            [food(100), TaxableLine(c(100), FOOD, "Food", 1000)],
+            platform_fee_bps=FEE_BPS,
+        )
 
 
 # ---------------------------------------------------------------- no floats, ever
 
 
 def test_every_amount_is_an_int() -> None:
-    q = quote([c(1099), c(1)], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
-    for amount in (q.subtotal_cents, q.tax_cents, q.tip_cents, q.platform_fee_cents, q.total_cents):
+    q = quote([food(1099), alcohol(1)], platform_fee_bps=FEE_BPS)
+    amounts = (q.subtotal_cents, q.tax_cents, q.tip_cents, q.platform_fee_cents, q.total_cents)
+    for amount in amounts:
         assert type(amount) is int
+    for tl in q.tax_lines:
+        assert type(tl.tax_cents) is int and type(tl.subtotal_cents) is int
 
 
 @pytest.mark.parametrize("bad", [10.5, 10.0, "1000", True, None])
@@ -122,7 +186,10 @@ def test_non_int_amounts_are_rejected(bad: object) -> None:
     with pytest.raises(TypeError):
         unit_price(c(100), [bad])  # type: ignore[list-item]
     with pytest.raises(TypeError):
-        quote([bad], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)  # type: ignore[list-item]
+        quote(
+            [TaxableLine(bad, FOOD, "Food", FOOD_BPS)],  # type: ignore[arg-type]
+            platform_fee_bps=FEE_BPS,
+        )
 
 
 @pytest.mark.parametrize("bad", [2.0, True, "2"])
@@ -137,4 +204,4 @@ def test_negative_amounts_are_rejected() -> None:
     with pytest.raises(ValueError):
         unit_price(c(100), [c(-50)])
     with pytest.raises(ValueError):
-        quote([c(-1)], tax_rate_bps=GST_BPS, platform_fee_bps=FEE_BPS)
+        quote([food(-1)], platform_fee_bps=FEE_BPS)

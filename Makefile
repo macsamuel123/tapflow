@@ -45,5 +45,5 @@ lint-web:
 types: ## Regenerate web/src/lib/database.types.ts from the local DB
 	$(SUPABASE) gen types typescript --local --schema public > web/src/lib/database.types.ts
 
-qr-urls: ## Print signed table URLs for the seeded restaurant(s)
+qr-urls: ## Print signed touchpoint URLs for the seeded venue(s)
 	cd api && uv run python -m app.scripts.qr_urls

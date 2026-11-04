@@ -3,14 +3,15 @@ from fastapi import APIRouter, Path, status
 from app.deps import DbConn, api_error
 from app.domain.menu import MenuItem
 from app.repositories import menu as menu_repo
-from app.repositories import restaurants as restaurants_repo
+from app.repositories import venues as venues_repo
 from app.schemas.menu import (
     MenuCategoryOut,
     MenuItemOut,
     MenuResponse,
     ModifierGroupOut,
     ModifierOut,
-    RestaurantOut,
+    TaxCategoryOut,
+    VenueOut,
 )
 from app.schemas.sessions import SLUG_PATTERN
 
@@ -28,6 +29,9 @@ def _item_out(item: MenuItem) -> MenuItemOut:
         allergens=list(item.allergens),
         dietary_tags=list(item.dietary_tags),
         in_stock=item.in_stock,
+        tax_category=TaxCategoryOut(
+            name=item.tax_category.name, rate_bps=item.tax_category.rate_bps
+        ),
         modifier_groups=[
             ModifierGroupOut(
                 id=g.id,
@@ -50,21 +54,16 @@ def _item_out(item: MenuItem) -> MenuItemOut:
     )
 
 
-@router.get("/restaurants/{slug}/menu", response_model=MenuResponse)
+@router.get("/venues/{slug}/menu", response_model=MenuResponse)
 async def get_menu(
     conn: DbConn, slug: str = Path(min_length=2, max_length=60, pattern=SLUG_PATTERN)
 ) -> MenuResponse:
-    restaurant = await restaurants_repo.get_by_slug(conn, slug)
-    if restaurant is None:
-        raise api_error(status.HTTP_404_NOT_FOUND, "restaurant_not_found", "Restaurant not found.")
-    categories = await menu_repo.load_menu(conn, restaurant.id)
+    venue = await venues_repo.get_by_slug(conn, slug)
+    if venue is None:
+        raise api_error(status.HTTP_404_NOT_FOUND, "venue_not_found", "Venue not found.")
+    categories = await menu_repo.load_menu(conn, venue.id)
     return MenuResponse(
-        restaurant=RestaurantOut(
-            slug=restaurant.slug,
-            name=restaurant.name,
-            currency=restaurant.currency,
-            tax_rate_bps=restaurant.tax_rate_bps,
-        ),
+        venue=VenueOut(slug=venue.slug, name=venue.name, currency=venue.currency),
         categories=[
             MenuCategoryOut(id=c.id, name=c.name, items=[_item_out(i) for i in c.items])
             for c in categories

@@ -16,6 +16,8 @@ export type ModifierGroup = {
   modifiers: Modifier[];
 };
 
+export type TaxCategory = { name: string; rate_bps: number };
+
 export type MenuItem = {
   id: string;
   name: string;
@@ -26,21 +28,25 @@ export type MenuItem = {
   allergens: string[];
   dietary_tags: string[];
   in_stock: boolean;
+  tax_category: TaxCategory;
   modifier_groups: ModifierGroup[];
 };
 
 export type MenuCategory = { id: string; name: string; items: MenuItem[] };
 
 export type Menu = {
-  restaurant: { slug: string; name: string; currency: string; tax_rate_bps: number };
+  venue: { slug: string; name: string; currency: string };
   categories: MenuCategory[];
 };
 
+export type TouchpointKind = "table" | "seat" | "lounger" | "cart" | "room" | "counter" | "other";
+
 export type Session = {
   session_id: string;
-  restaurant_slug: string;
-  table_id: string | null;
-  table_label: string | null;
+  venue_slug: string;
+  touchpoint_id: string | null;
+  touchpoint_label: string | null;
+  touchpoint_kind: TouchpointKind | null;
   verified: boolean;
   expires_at: string;
 };
@@ -60,12 +66,19 @@ export type CartLine = {
   problem: string | null;
 };
 
+export type TaxLine = {
+  name: string;
+  rate_bps: number;
+  subtotal_cents: number;
+  tax_cents: number;
+};
+
 export type Cart = {
   currency: string;
   lines: CartLine[];
   item_count: number;
   subtotal_cents: number;
-  tax_rate_bps: number;
+  tax_breakdown: TaxLine[];
   tax_cents: number;
   tip_cents: number;
   total_cents: number;

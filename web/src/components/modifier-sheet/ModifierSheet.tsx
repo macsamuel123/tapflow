@@ -138,7 +138,7 @@ export function ModifierSheet({ item, currency, onClose, onAdd }: Props) {
           })}
 
           <label className="block">
-            <span className="font-medium">Notes for the kitchen</span>
+            <span className="font-medium">Notes for fulfillment</span>
             <textarea
               value={notes}
               maxLength={MAX_NOTES}

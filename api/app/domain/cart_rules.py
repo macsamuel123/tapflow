@@ -1,7 +1,7 @@
 """Server-side cart rules (CLAUDE.md invariant 2). Pure: callers load the item from the DB.
 
 A cart line is valid when:
-- the item exists, belongs to this restaurant, and is in stock;
+- the item exists, belongs to this venue, and is in stock;
 - every modifier id is unique, belongs to one of that item's groups, and is in stock;
 - every group's selection count is within [min_select, max_select] (required implies min >= 1);
 - quantity is 1-20.
@@ -48,12 +48,12 @@ class ValidatedLine:
 def validate_line(
     item: MenuItem | None,
     *,
-    restaurant_id: UUID,
+    venue_id: UUID,
     modifier_ids: Sequence[UUID],
     quantity: int,
 ) -> ValidatedLine:
-    # An item from another restaurant is reported as "not found": don't confirm it exists.
-    if item is None or item.restaurant_id != restaurant_id:
+    # An item from another venue is reported as "not found": don't confirm it exists.
+    if item is None or item.venue_id != venue_id:
         raise CartRuleError(RuleCode.ITEM_NOT_FOUND, "That item isn't on this menu.")
     if not item.in_stock:
         raise CartRuleError(RuleCode.ITEM_OUT_OF_STOCK, f"{item.name} is sold out.")
@@ -67,7 +67,7 @@ def validate_line(
 
     by_id = {m.id: m for g in item.groups for m in g.modifiers}
     for mid in modifier_ids:
-        # Unknown ids, another item's modifiers and another restaurant's all land here.
+        # Unknown ids, another item's modifiers and another venue's all land here.
         if mid not in by_id:
             raise CartRuleError(
                 RuleCode.MODIFIER_NOT_FOUND, f"That option isn't available for {item.name}."

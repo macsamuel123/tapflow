@@ -10,35 +10,37 @@ from app.db import Conn
 @dataclass(frozen=True, slots=True)
 class DinerSession:
     id: UUID
-    restaurant_id: UUID
-    restaurant_slug: str
-    table_id: UUID | None
-    table_label: str | None
+    venue_id: UUID
+    venue_slug: str
+    touchpoint_id: UUID | None
+    touchpoint_label: str | None
+    touchpoint_kind: str | None
     verified: bool
     expires_at: datetime
 
 
 _SELECT = """
-select s.id, s.restaurant_id, r.slug as restaurant_slug, s.table_id, t.label as table_label,
+select s.id, s.venue_id, v.slug as venue_slug, s.touchpoint_id,
+       t.label as touchpoint_label, t.kind::text as touchpoint_kind,
        s.verified, s.expires_at
-from public.table_sessions s
-join public.restaurants r on r.id = s.restaurant_id
-left join public.tables t on t.id = s.table_id
+from public.touchpoint_sessions s
+join public.venues v on v.id = s.venue_id
+left join public.touchpoints t on t.id = s.touchpoint_id
 """
 
 
 async def create(
-    conn: Conn, *, restaurant_id: UUID, table_id: UUID | None, verified: bool
+    conn: Conn, *, venue_id: UUID, touchpoint_id: UUID | None, verified: bool
 ) -> DinerSession:
     cur = await conn.execute(
-        "insert into public.table_sessions (restaurant_id, table_id, verified) "
+        "insert into public.touchpoint_sessions (venue_id, touchpoint_id, verified) "
         "values (%s, %s, %s) returning id",
-        (restaurant_id, table_id, verified),
+        (venue_id, touchpoint_id, verified),
     )
     row = await cur.fetchone()
     session = await get_active(conn, row[0]) if row else None
     if session is None:
-        raise RuntimeError("table_sessions insert returned no row")
+        raise RuntimeError("touchpoint_sessions insert returned no row")
     return session
 
 
@@ -51,5 +53,5 @@ async def get_active(conn: Conn, session_id: UUID) -> DinerSession | None:
 
 async def touch(conn: Conn, session_id: UUID) -> None:
     await conn.execute(
-        "update public.table_sessions set last_seen_at = now() where id = %s", (session_id,)
+        "update public.touchpoint_sessions set last_seen_at = now() where id = %s", (session_id,)
     )

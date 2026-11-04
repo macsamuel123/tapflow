@@ -30,9 +30,14 @@ def test_health_against_real_db() -> None:
 def test_seed_loaded() -> None:
     with psycopg.connect(get_settings().database_url) as conn:
         row = conn.execute(
-            "select currency, timezone, tax_rate_bps from public.restaurants "
-            "where slug = 'demo-bistro'"
+            "select currency, timezone from public.venues where slug = 'demo-bistro'"
         ).fetchone()
-        assert row == ("CAD", "America/Vancouver", 500)
+        assert row == ("CAD", "America/Vancouver")
+        rates = conn.execute(
+            "select tc.name, tc.rate_bps from public.tax_categories tc "
+            "join public.venues v on v.id = tc.venue_id where v.slug = 'demo-bistro' "
+            "order by tc.name"
+        ).fetchall()
+        assert rates == [("Alcohol", 1500), ("Food", 500)]
         n_items = conn.execute("select count(*) from public.menu_items").fetchone()
         assert n_items is not None and n_items[0] >= 20

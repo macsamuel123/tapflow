@@ -1,7 +1,7 @@
 [project]
-name = "restaurant-api"
+name = "tapflow-api"
 version = "0.1.0"
-description = "FastAPI backend for the QR ordering platform"
+description = "FastAPI backend for TapFlow"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.115",

@@ -1,18 +1,18 @@
-"""Print signed table URLs for local development: `make qr-urls`."""
+"""Print signed touchpoint URLs for local development: `make qr-urls`."""
 
 import sys
 
 import psycopg
 
 from app.config import get_settings
-from app.domain.qr_tokens import sign_table_token
+from app.domain.qr_tokens import sign_touchpoint_token
 
 QUERY = """
-select r.slug, t.id, t.label, t.qr_secret
-from public.tables t
-join public.restaurants r on r.id = t.restaurant_id
+select v.slug, t.id, t.label, t.kind::text, t.qr_secret
+from public.touchpoints t
+join public.venues v on v.id = t.venue_id
 where t.active
-order by r.slug, t.label
+order by v.slug, t.label
 """
 
 
@@ -25,9 +25,9 @@ def main() -> int:
     except psycopg.OperationalError as exc:
         print(f"Cannot reach database ({exc}). Is `supabase start` running?", file=sys.stderr)
         return 1
-    for slug, table_id, label, secret in rows:
-        token = sign_table_token(secret, slug, table_id)
-        print(f"{slug:<16} {label:<10} {base}/r/{slug}/t/{table_id}?token={token}")
+    for slug, touchpoint_id, label, kind, secret in rows:
+        token = sign_touchpoint_token(secret, slug, touchpoint_id)
+        print(f"{slug:<16} {kind:<8} {label:<10} {base}/v/{slug}/p/{touchpoint_id}?token={token}")
     return 0
 
 

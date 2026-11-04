@@ -6,12 +6,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.domain.cart_rules import CartRuleError, RuleCode, validate_line
-from app.domain.menu import MenuItem, Modifier, ModifierGroup
+from app.domain.menu import MenuItem, Modifier, ModifierGroup, TaxCategory
 from app.domain.money import Cents
 
-RESTAURANT = UUID("b0000000-0000-4000-8000-000000000001")
-OTHER_RESTAURANT = UUID("b0000000-0000-4000-8000-000000000099")
+VENUE = UUID("b0000000-0000-4000-8000-000000000001")
+OTHER_VENUE = UUID("b0000000-0000-4000-8000-000000000099")
 CATEGORY = uuid4()
+FOOD_TAX = TaxCategory(id=uuid4(), name="Food", rate_bps=500)
 
 
 def mod(group_id: UUID, name: str, delta: int = 0, *, in_stock: bool = True) -> Modifier:
@@ -39,13 +40,14 @@ def item(
     groups_spec: list[tuple[str, int, int, list[tuple[str, int]]]] | None = None,
     *,
     in_stock: bool = True,
-    restaurant_id: UUID = RESTAURANT,
+    venue_id: UUID = VENUE,
 ) -> MenuItem:
     iid = uuid4()
     return MenuItem(
         id=iid,
-        restaurant_id=restaurant_id,
+        venue_id=venue_id,
         category_id=CATEGORY,
+        tax_category=FOOD_TAX,
         name=name,
         description="",
         price_cents=Cents(price),
@@ -89,13 +91,13 @@ def m(it: MenuItem, group_name: str, mod_name: str) -> UUID:
 
 
 def ok(it: MenuItem | None, modifier_ids: list[UUID], quantity: int = 1) -> tuple[int, int]:
-    v = validate_line(it, restaurant_id=RESTAURANT, modifier_ids=modifier_ids, quantity=quantity)
+    v = validate_line(it, venue_id=VENUE, modifier_ids=modifier_ids, quantity=quantity)
     return v.unit_price_cents, v.line_total_cents
 
 
 def rejects(it: MenuItem | None, modifier_ids: list[UUID], quantity: int = 1) -> RuleCode:
     with pytest.raises(CartRuleError) as exc:
-        validate_line(it, restaurant_id=RESTAURANT, modifier_ids=modifier_ids, quantity=quantity)
+        validate_line(it, venue_id=VENUE, modifier_ids=modifier_ids, quantity=quantity)
     return exc.value.code
 
 
@@ -127,7 +129,7 @@ def test_selected_modifiers_returned_in_menu_order() -> None:
         m(BURGER, "Add-ons", "Fried egg"),
         m(BURGER, "Doneness", "Well done"),
     )
-    v = validate_line(BURGER, restaurant_id=RESTAURANT, modifier_ids=[egg, bacon, done], quantity=1)
+    v = validate_line(BURGER, venue_id=VENUE, modifier_ids=[egg, bacon, done], quantity=1)
     assert [x.name for x in v.modifiers] == ["Well done", "Bacon", "Fried egg"]
 
 
@@ -143,8 +145,8 @@ def test_unknown_item() -> None:
     assert rejects(None, []) is RuleCode.ITEM_NOT_FOUND
 
 
-def test_item_from_another_restaurant_looks_not_found() -> None:
-    foreign = item("Foreign Fries", 900, restaurant_id=OTHER_RESTAURANT)
+def test_item_from_another_venue_looks_not_found() -> None:
+    foreign = item("Foreign Fries", 900, venue_id=OTHER_VENUE)
     assert rejects(foreign, []) is RuleCode.ITEM_NOT_FOUND
 
 
@@ -213,9 +215,9 @@ def test_unknown_modifier_id() -> None:
     assert rejects(AMERICANO, [uuid4()]) is RuleCode.MODIFIER_NOT_FOUND
 
 
-def test_modifier_from_another_restaurant() -> None:
+def test_modifier_from_another_venue() -> None:
     foreign_burger = item(
-        "Burger", 1800, [("Doneness", 1, 1, [("Medium", 0)])], restaurant_id=OTHER_RESTAURANT
+        "Burger", 1800, [("Doneness", 1, 1, [("Medium", 0)])], venue_id=OTHER_VENUE
     )
     foreign_medium = m(foreign_burger, "Doneness", "Medium")
     assert rejects(BURGER, [foreign_medium]) is RuleCode.MODIFIER_NOT_FOUND

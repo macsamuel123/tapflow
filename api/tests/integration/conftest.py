@@ -16,13 +16,13 @@ from psycopg import AsyncConnection
 
 from app.config import get_settings
 from app.db import Conn, get_conn
-from app.domain.qr_tokens import sign_table_token
+from app.domain.qr_tokens import sign_touchpoint_token
 from app.main import create_app
 
 SLUG = "demo-bistro"
-RESTAURANT_ID = UUID("b0000000-0000-4000-8000-000000000001")
-TABLE_1 = UUID("c0000000-0000-4000-8000-000000000001")
-TABLE_2 = UUID("c0000000-0000-4000-8000-000000000002")
+VENUE_ID = UUID("b0000000-0000-4000-8000-000000000001")
+TOUCHPOINT_1 = UUID("c0000000-0000-4000-8000-000000000001")
+TOUCHPOINT_2 = UUID("c0000000-0000-4000-8000-000000000002")
 TABLE_1_SECRET = "dev-only-qr-secret-table-01"
 
 BURGER = UUID("e0000000-0000-4000-8000-000000000201")
@@ -44,8 +44,10 @@ DB_AVAILABLE = _db_available()
 requires_db = pytest.mark.skipif(not DB_AVAILABLE, reason="local Supabase Postgres not running")
 
 
-def table_token(table_id: UUID = TABLE_1, secret: str = TABLE_1_SECRET, slug: str = SLUG) -> str:
-    return sign_table_token(secret, slug, table_id)
+def touchpoint_token(
+    touchpoint_id: UUID = TOUCHPOINT_1, secret: str = TABLE_1_SECRET, slug: str = SLUG
+) -> str:
+    return sign_touchpoint_token(secret, slug, touchpoint_id)
 
 
 @pytest.fixture
@@ -73,11 +75,13 @@ async def client(db: Conn) -> AsyncIterator[httpx.AsyncClient]:
 
 
 async def start_session(
-    client: httpx.AsyncClient, *, verified: bool = True, table_id: UUID = TABLE_1
+    client: httpx.AsyncClient, *, verified: bool = True, touchpoint_id: UUID = TOUCHPOINT_1
 ) -> dict[str, Any]:
-    body: dict[str, Any] = {"restaurant_slug": SLUG, "table_id": str(table_id)}
+    body: dict[str, Any] = {"venue_slug": SLUG, "touchpoint_id": str(touchpoint_id)}
     if verified:
-        body["token"] = table_token(table_id, secret=f"dev-only-qr-secret-table-0{_n(table_id)}")
+        body["token"] = touchpoint_token(
+            touchpoint_id, secret=f"dev-only-qr-secret-table-0{_n(touchpoint_id)}"
+        )
     res = await client.post("/sessions", json=body)
     assert res.status_code == 201, res.text
     data: dict[str, Any] = res.json()
@@ -85,8 +89,8 @@ async def start_session(
     return data
 
 
-def _n(table_id: UUID) -> int:
-    return int(str(table_id)[-1])
+def _n(touchpoint_id: UUID) -> int:
+    return int(str(touchpoint_id)[-1])
 
 
 def auth(session: dict[str, Any]) -> dict[str, str]:
@@ -95,7 +99,7 @@ def auth(session: dict[str, Any]) -> dict[str, str]:
 
 async def modifier_ids(client: httpx.AsyncClient) -> dict[tuple[UUID, str], UUID]:
     """(item_id, modifier name) -> modifier id, from the public menu (seed ids are random)."""
-    res = await client.get(f"/restaurants/{SLUG}/menu")
+    res = await client.get(f"/venues/{SLUG}/menu")
     assert res.status_code == 200
     out: dict[tuple[UUID, str], UUID] = {}
     for cat in res.json()["categories"]:

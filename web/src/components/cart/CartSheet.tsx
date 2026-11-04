@@ -13,11 +13,11 @@ type Props = {
   onRemove: (lineId: string) => void;
 };
 
-function taxLabel(bps: number): string {
+function taxLabel(name: string, bps: number): string {
   // 500 bps → "5%", 1250 → "12.5%": string formatting of an integer, no float math.
   const whole = (bps - (bps % 100)) / 100;
   const frac = String(bps % 100).padStart(2, "0").replace(/0+$/, "");
-  return `GST ${whole}${frac ? `.${frac}` : ""}%`;
+  return `${name} ${whole}${frac ? `.${frac}` : ""}%`;
 }
 
 export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: Props) {
@@ -113,10 +113,12 @@ export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: 
             <span>Subtotal</span>
             <span className="tabular-nums">{formatCents(cart.subtotal_cents, c)}</span>
           </div>
-          <div className="flex justify-between text-gray-600">
-            <span>{taxLabel(cart.tax_rate_bps)}</span>
-            <span className="tabular-nums">{formatCents(cart.tax_cents, c)}</span>
-          </div>
+          {cart.tax_breakdown.map((t) => (
+            <div key={t.name} className="flex justify-between text-gray-600">
+              <span>{taxLabel(t.name, t.rate_bps)}</span>
+              <span className="tabular-nums">{formatCents(t.tax_cents, c)}</span>
+            </div>
+          ))}
           <div className="flex justify-between pt-1 text-base font-semibold">
             <span>Total</span>
             <span className="tabular-nums">{formatCents(cart.total_cents, c)}</span>
@@ -135,7 +137,7 @@ export function CartSheet({ cart, busy, error, onClose, onQuantity, onRemove }: 
             </>
           ) : (
             <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-center text-amber-900">
-              Scan the QR on your table to check out.
+              Scan the QR at your touchpoint to check out.
             </p>
           )}
         </div>

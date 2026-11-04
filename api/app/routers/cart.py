@@ -8,12 +8,11 @@ from fastapi import APIRouter, status
 from app.deps import CurrentSession, DbConn, api_error
 from app.domain.cart_rules import CartRuleError, RuleCode, ValidatedLine, validate_line
 from app.domain.menu import MenuItem
-from app.domain.money import Cents
-from app.domain.pricing import MAX_QUANTITY, quote
+from app.domain.pricing import MAX_QUANTITY, TaxableLine, quote
 from app.repositories import carts as carts_repo
 from app.repositories import menu as menu_repo
-from app.repositories import restaurants as restaurants_repo
 from app.repositories import sessions as sessions_repo
+from app.repositories import venues as venues_repo
 from app.repositories.carts import CartLine
 from app.repositories.sessions import DinerSession
 from app.schemas.cart import (
@@ -21,6 +20,7 @@ from app.schemas.cart import (
     CartLineOut,
     CartModifierOut,
     CartResponse,
+    TaxLineOut,
     UpdateCartItemRequest,
 )
 
@@ -41,7 +41,7 @@ def _rule_http_error(err: CartRuleError) -> Exception:
 
 
 async def _load_item(conn: DbConn, session: DinerSession, item_id: UUID) -> MenuItem | None:
-    items = await menu_repo.load_items(conn, session.restaurant_id, [item_id])
+    items = await menu_repo.load_items(conn, session.venue_id, [item_id])
     return items[0] if items else None
 
 
@@ -51,7 +51,7 @@ def _validate(
     try:
         return validate_line(
             item,
-            restaurant_id=session.restaurant_id,
+            venue_id=session.venue_id,
             modifier_ids=modifier_ids,
             quantity=quantity,
         )
@@ -59,17 +59,20 @@ def _validate(
         raise _rule_http_error(err) from err
 
 
-def _line_out(line: CartLine, item: MenuItem | None, session: DinerSession) -> CartLineOut:
+def _line_out(
+    line: CartLine, item: MenuItem | None, session: DinerSession
+) -> tuple[CartLineOut, TaxableLine | None]:
+    """The client-facing line, plus its taxable amount when the line is available."""
     try:
         v = validate_line(
             item,
-            restaurant_id=session.restaurant_id,
+            venue_id=session.venue_id,
             modifier_ids=line.modifier_ids,
             quantity=line.quantity,
         )
     except CartRuleError as err:
         # Still show the line so the diner can see what changed and remove it.
-        return CartLineOut(
+        unavailable = CartLineOut(
             id=line.id,
             item_id=line.item_id,
             name=item.name if item else "Unavailable item",
@@ -81,7 +84,8 @@ def _line_out(line: CartLine, item: MenuItem | None, session: DinerSession) -> C
             available=False,
             problem=err.message,
         )
-    return CartLineOut(
+        return unavailable, None
+    out = CartLineOut(
         id=line.id,
         item_id=line.item_id,
         name=v.item.name,
@@ -96,36 +100,49 @@ def _line_out(line: CartLine, item: MenuItem | None, session: DinerSession) -> C
         available=True,
         problem=None,
     )
+    taxable = TaxableLine(
+        amount_cents=v.line_total_cents,
+        tax_category_id=v.item.tax_category.id,
+        tax_category_name=v.item.tax_category.name,
+        tax_rate_bps=v.item.tax_category.rate_bps,
+    )
+    return out, taxable
 
 
 async def _cart_response(conn: DbConn, session: DinerSession) -> CartResponse:
-    restaurant = await restaurants_repo.get_by_id(conn, session.restaurant_id)
-    if restaurant is None:  # session FK makes this unreachable short of a race with deletion
-        raise api_error(status.HTTP_404_NOT_FOUND, "restaurant_not_found", "Restaurant not found.")
+    venue = await venues_repo.get_by_id(conn, session.venue_id)
+    if venue is None:  # session FK makes this unreachable short of a race with deletion
+        raise api_error(status.HTTP_404_NOT_FOUND, "venue_not_found", "Venue not found.")
     lines = await carts_repo.list_lines(conn, session.id)
     items = (
         {
             i.id: i
             for i in await menu_repo.load_items(
-                conn, session.restaurant_id, list({ln.item_id for ln in lines})
+                conn, session.venue_id, list({ln.item_id for ln in lines})
             )
         }
         if lines
         else {}
     )
-    out = [_line_out(ln, items.get(ln.item_id), session) for ln in lines]
+    rows = [_line_out(ln, items.get(ln.item_id), session) for ln in lines]
+    out = [row[0] for row in rows]
+    taxable = [row[1] for row in rows if row[1] is not None]
     available = [ln for ln in out if ln.available]
-    q = quote(
-        (Cents(ln.line_total_cents) for ln in available),
-        tax_rate_bps=restaurant.tax_rate_bps,
-        platform_fee_bps=restaurant.platform_fee_bps,
-    )
+    q = quote(taxable, platform_fee_bps=venue.platform_fee_bps)
     return CartResponse(
-        currency=restaurant.currency,
+        currency=venue.currency,
         lines=out,
         item_count=sum(ln.quantity for ln in available),
         subtotal_cents=q.subtotal_cents,
-        tax_rate_bps=restaurant.tax_rate_bps,
+        tax_breakdown=[
+            TaxLineOut(
+                name=tl.name,
+                rate_bps=tl.rate_bps,
+                subtotal_cents=tl.subtotal_cents,
+                tax_cents=tl.tax_cents,
+            )
+            for tl in q.tax_lines
+        ],
         tax_cents=q.tax_cents,
         tip_cents=q.tip_cents,
         total_cents=q.total_cents,

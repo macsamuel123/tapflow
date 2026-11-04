@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "Order at your table", template: "%s · Order at your table" },
-  description: "Scan, order and pay from your table.",
-  applicationName: "Table Order",
+  title: { default: "TapFlow", template: "%s · TapFlow" },
+  description: "Scan, order and pay from your seat.",
+  applicationName: "TapFlow",
 };
 
 export const viewport: Viewport = {

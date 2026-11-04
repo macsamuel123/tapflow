@@ -3,7 +3,7 @@
 token = f"{session_id}.{base64url_nopad(HMAC_SHA256(SESSION_SECRET, session_id))}"
 
 The token only proves the client was issued this session id; the DB row decides whether the
-session still exists, has expired, and whether it is verified (scanned a valid table QR).
+session still exists, has expired, and whether it is verified (scanned a valid touchpoint QR).
 """
 
 import base64

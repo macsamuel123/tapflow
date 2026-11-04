@@ -1,6 +1,6 @@
-# Table Order: QR ordering MVP
+# TapFlow: QR ordering MVP
 
-Diners scan a table QR code, order and pay with Stripe. The kitchen gets the ticket on a live display, and a server delivers it to the table.
+Diners scan a touchpoint QR code (a table, seat, lounger, cart, room or counter), order and pay with Stripe. Fulfillment gets the ticket on a live display, and a runner delivers it to the touchpoint.
 
 - Architecture, decisions and roadmap: [PLAN.md](PLAN.md)
 - Commands, conventions and invariants: [CLAUDE.md](CLAUDE.md)
@@ -18,7 +18,7 @@ make install
 cp api/.env.example api/.env
 cp web/.env.example web/.env.local   # fill NEXT_PUBLIC_SUPABASE_ANON_KEY from `pnpm exec supabase status`
 make dev                              # Supabase + API :8000 + web :3000
-make qr-urls                          # signed table URLs for Demo Bistro
+make qr-urls                          # signed touchpoint URLs for Demo Bistro
 make test                             # pytest + pgTAP
 ```
 
@@ -28,6 +28,6 @@ Local services:
 - Supabase Studio: http://localhost:54323
 - Magic-link inbox (Inbucket/Mailpit): http://localhost:54324
 
-Demo staff logins (magic link): `owner@demo.test`, `kitchen@demo.test`.
+Demo staff logins (magic link): `owner@demo.test`, `fulfillment@demo.test`.
 
 The full README (architecture diagram and demo script) comes in M4.

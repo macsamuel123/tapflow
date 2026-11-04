@@ -37,7 +37,7 @@ async def get_diner_session(
         raise api_error(
             status.HTTP_401_UNAUTHORIZED,
             "session_invalid",
-            "Your session has expired. Scan the QR on your table again.",
+            "Your session has expired. Scan the QR at your touchpoint again.",
         )
     return session
 

@@ -9,7 +9,7 @@ import type { Cart, Menu, MenuItem } from "@/lib/api-types";
 import { formatCents } from "@/lib/money";
 import { ensureSession, type ActiveSession } from "@/lib/session";
 
-type Props = { menu: Menu; slug: string; tableId: string; qrToken: string | null };
+type Props = { menu: Menu; slug: string; touchpointId: string; qrToken: string | null };
 
 type SessionState =
   | { kind: "loading" }
@@ -20,8 +20,8 @@ function message(err: unknown): string {
   return err instanceof Error ? err.message : "Something went wrong. Please try again.";
 }
 
-export function MenuScreen({ menu, slug, tableId, qrToken }: Props) {
-  const currency = menu.restaurant.currency;
+export function MenuScreen({ menu, slug, touchpointId, qrToken }: Props) {
+  const currency = menu.venue.currency;
   const [state, setState] = useState<SessionState>({ kind: "loading" });
   const [cart, setCart] = useState<Cart | null>(null);
   const [openItem, setOpenItem] = useState<MenuItem | null>(null);
@@ -32,13 +32,13 @@ export function MenuScreen({ menu, slug, tableId, qrToken }: Props) {
   const start = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      const session = await ensureSession(slug, tableId, qrToken);
+      const session = await ensureSession(slug, touchpointId, qrToken);
       setState({ kind: "ready", session });
       setCart(await getCart(session.token));
     } catch (err) {
       setState({ kind: "error", message: message(err) });
     }
-  }, [slug, tableId, qrToken]);
+  }, [slug, touchpointId, qrToken]);
 
   useEffect(() => {
     void start();
@@ -75,8 +75,8 @@ export function MenuScreen({ menu, slug, tableId, qrToken }: Props) {
     <div className="mx-auto max-w-2xl pb-28">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 pb-2 pt-4 backdrop-blur">
         <div className="flex items-baseline justify-between gap-3">
-          <h1 className="text-xl font-bold">{menu.restaurant.name}</h1>
-          {session?.tableLabel && <span className="text-sm text-gray-600">{session.tableLabel}</span>}
+          <h1 className="text-xl font-bold">{menu.venue.name}</h1>
+          {session?.touchpointLabel && <span className="text-sm text-gray-600">{session.touchpointLabel}</span>}
         </div>
         <nav aria-label="Menu sections" className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1">
           {menu.categories.map((c) => (
@@ -89,7 +89,7 @@ export function MenuScreen({ menu, slug, tableId, qrToken }: Props) {
 
       {session && !session.verified && (
         <p role="status" className="mx-4 mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-          You&apos;re browsing the menu. <strong>Scan the QR on your table</strong> to order.
+          You&apos;re browsing the menu. <strong>Scan the QR at your touchpoint</strong> to order.
         </p>
       )}
       {state.kind === "error" && (

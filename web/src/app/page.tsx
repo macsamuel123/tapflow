@@ -1,11 +1,11 @@
-// Development landing page. Diners never see this: they arrive via a table QR URL
-// (/r/{slug}/t/{tableId}?token=...). Run `make qr-urls` to print signed table links.
+// Development landing page. Diners never see this: they arrive via a touchpoint QR URL
+// (/v/{slug}/p/{touchpointId}?token=...). Run `make qr-urls` to print signed touchpoint links.
 export default function Home() {
   return (
     <main className="mx-auto max-w-xl p-6">
-      <h1 className="text-2xl font-bold">Table Order — development</h1>
+      <h1 className="text-2xl font-bold">TapFlow — development</h1>
       <p className="mt-2 text-gray-600">
-        Diners land on a signed table URL from a QR code. To get the URLs for the seeded restaurant, run:
+        Diners land on a signed touchpoint URL from a QR code. To get the URLs for the seeded venue, run:
       </p>
       <pre className="mt-3 rounded bg-gray-100 p-3 text-sm">make qr-urls</pre>
       <ul className="mt-6 list-disc space-y-1 pl-5 text-sm text-gray-700">

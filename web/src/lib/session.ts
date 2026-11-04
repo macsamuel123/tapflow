@@ -1,16 +1,18 @@
 import { ApiError, createSession, getSession } from "./api-client";
+import type { TouchpointKind } from "./api-types";
 
 export type ActiveSession = {
   token: string;
   verified: boolean;
-  tableId: string | null;
-  tableLabel: string | null;
+  touchpointId: string | null;
+  touchpointLabel: string | null;
+  touchpointKind: TouchpointKind | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function key(slug: string): string {
-  return `table-order:session:${slug}`;
+  return `tapflow:session:${slug}`;
 }
 
 function load(slug: string): ActiveSession | null {
@@ -31,22 +33,27 @@ function save(slug: string, s: ActiveSession): void {
 }
 
 /**
- * Reuse the stored session for this table if the API still accepts it, otherwise start one.
+ * Reuse the stored session for this touchpoint if the API still accepts it, otherwise start one.
  * A fresh QR token in the URL upgrades a browse-only session (a new verified session).
  * Whether a session is verified is decided by the API alone.
  */
 export async function ensureSession(
   slug: string,
-  rawTableId: string,
+  rawTouchpointId: string,
   qrToken: string | null,
 ): Promise<ActiveSession> {
-  const tableId = UUID_RE.test(rawTableId) ? rawTableId : null;
+  const touchpointId = UUID_RE.test(rawTouchpointId) ? rawTouchpointId : null;
   const stored = load(slug);
 
-  if (stored && stored.tableId === tableId && (stored.verified || !qrToken)) {
+  if (stored && stored.touchpointId === touchpointId && (stored.verified || !qrToken)) {
     try {
       const s = await getSession(stored.token);
-      const active = { ...stored, verified: s.verified, tableLabel: s.table_label };
+      const active: ActiveSession = {
+        ...stored,
+        verified: s.verified,
+        touchpointLabel: s.touchpoint_label,
+        touchpointKind: s.touchpoint_kind,
+      };
       save(slug, active);
       return active;
     } catch (err) {
@@ -55,12 +62,17 @@ export async function ensureSession(
     }
   }
 
-  const created = await createSession({ restaurant_slug: slug, table_id: tableId, token: qrToken });
+  const created = await createSession({
+    venue_slug: slug,
+    touchpoint_id: touchpointId,
+    token: qrToken,
+  });
   const active: ActiveSession = {
     token: created.session_token,
     verified: created.verified,
-    tableId: created.table_id ?? tableId,
-    tableLabel: created.table_label,
+    touchpointId: created.touchpoint_id ?? touchpointId,
+    touchpointLabel: created.touchpoint_label,
+    touchpointKind: created.touchpoint_kind,
   };
   save(slug, active);
   return active;

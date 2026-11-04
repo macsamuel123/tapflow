@@ -1,5 +1,5 @@
 """Menu reads. One loader serves both the public menu and server-side cart validation,
-so the prices a diner sees and the prices the cart charges come from the same rows."""
+so the prices and tax rates a diner sees and the ones the cart charges come from the same rows."""
 
 from collections import defaultdict
 from collections.abc import Sequence
@@ -9,7 +9,7 @@ from uuid import UUID
 from psycopg.rows import dict_row
 
 from app.db import Conn
-from app.domain.menu import MenuCategory, MenuItem, Modifier, ModifierGroup
+from app.domain.menu import MenuCategory, MenuItem, Modifier, ModifierGroup, TaxCategory
 from app.domain.money import Cents
 
 
@@ -20,20 +20,23 @@ async def _fetch(conn: Conn, sql: str, params: Sequence[object]) -> list[dict[st
 
 
 async def load_items(
-    conn: Conn, restaurant_id: UUID, item_ids: Sequence[UUID] | None = None
+    conn: Conn, venue_id: UUID, item_ids: Sequence[UUID] | None = None
 ) -> list[MenuItem]:
-    """Items of one restaurant (optionally only `item_ids`) with their groups and modifiers,
-    in menu order. Ids belonging to another restaurant are simply not returned."""
+    """Items of one venue (optionally only `item_ids`) with their tax category, groups and
+    modifiers, in menu order. Ids belonging to another venue are simply not returned."""
     wanted = None if item_ids is None else list(item_ids)
 
     items = await _fetch(
         conn,
-        "select i.id, i.restaurant_id, i.category_id, i.name, i.description, i.price_cents, "
-        "i.image_url, i.ingredients, i.allergens, i.dietary_tags, i.in_stock "
-        "from public.menu_items i join public.menu_categories c on c.id = i.category_id "
-        "where i.restaurant_id = %s and (%s::uuid[] is null or i.id = any(%s::uuid[])) "
+        "select i.id, i.venue_id, i.category_id, i.name, i.description, i.price_cents, "
+        "i.image_url, i.ingredients, i.allergens, i.dietary_tags, i.in_stock, "
+        "tc.id as tax_category_id, tc.name as tax_category_name, tc.rate_bps as tax_rate_bps "
+        "from public.menu_items i "
+        "join public.menu_categories c on c.id = i.category_id "
+        "join public.tax_categories tc on tc.id = i.tax_category_id "
+        "where i.venue_id = %s and (%s::uuid[] is null or i.id = any(%s::uuid[])) "
         "order by c.sort_order, i.sort_order, i.name",
-        [restaurant_id, wanted, wanted],
+        [venue_id, wanted, wanted],
     )
     if not items:
         return []
@@ -42,15 +45,15 @@ async def load_items(
     groups = await _fetch(
         conn,
         "select id, item_id, name, min_select, max_select, required from public.modifier_groups "
-        "where restaurant_id = %s and item_id = any(%s) order by sort_order, name",
-        [restaurant_id, ids],
+        "where venue_id = %s and item_id = any(%s) order by sort_order, name",
+        [venue_id, ids],
     )
     modifiers = await _fetch(
         conn,
         "select m.id, m.group_id, m.name, m.price_delta_cents, m.in_stock "
         "from public.modifiers m join public.modifier_groups g on g.id = m.group_id "
-        "where m.restaurant_id = %s and g.item_id = any(%s) order by m.sort_order, m.name",
-        [restaurant_id, ids],
+        "where m.venue_id = %s and g.item_id = any(%s) order by m.sort_order, m.name",
+        [venue_id, ids],
     )
 
     mods_by_group: dict[UUID, list[Modifier]] = defaultdict(list)
@@ -80,7 +83,7 @@ async def load_items(
     return [
         MenuItem(
             id=i["id"],
-            restaurant_id=i["restaurant_id"],
+            venue_id=i["venue_id"],
             category_id=i["category_id"],
             name=i["name"],
             description=i["description"],
@@ -90,21 +93,25 @@ async def load_items(
             allergens=tuple(i["allergens"]),
             dietary_tags=tuple(i["dietary_tags"]),
             in_stock=i["in_stock"],
+            tax_category=TaxCategory(
+                id=i["tax_category_id"],
+                name=i["tax_category_name"],
+                rate_bps=i["tax_rate_bps"],
+            ),
             groups=tuple(groups_by_item[i["id"]]),
         )
         for i in items
     ]
 
 
-async def load_menu(conn: Conn, restaurant_id: UUID) -> list[MenuCategory]:
+async def load_menu(conn: Conn, venue_id: UUID) -> list[MenuCategory]:
     categories = await _fetch(
         conn,
-        "select id, name from public.menu_categories where restaurant_id = %s "
-        "order by sort_order, name",
-        [restaurant_id],
+        "select id, name from public.menu_categories where venue_id = %s order by sort_order, name",
+        [venue_id],
     )
     items_by_category: dict[UUID, list[MenuItem]] = defaultdict(list)
-    for item in await load_items(conn, restaurant_id):
+    for item in await load_items(conn, venue_id):
         items_by_category[item.category_id].append(item)
     return [
         MenuCategory(id=c["id"], name=c["name"], items=tuple(items_by_category[c["id"]]))

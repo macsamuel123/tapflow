@@ -97,7 +97,10 @@ async def test_realistic_cart_priced_server_side_with_gst(
         2888,
     )
     assert c["currency"] == "CAD"
-    assert c["tax_rate_bps"] == 500
+    # Both lines are Food (5%): one category, rounded on its subtotal.
+    assert c["tax_breakdown"] == [
+        {"name": "Food", "rate_bps": 500, "subtotal_cents": 2750, "tax_cents": 138}
+    ]
     assert c["item_count"] == 3
     assert c["can_checkout"] is True
     assert "platform_fee" not in res.text
@@ -121,7 +124,7 @@ async def test_cart_reprices_from_current_db_prices(
         {"line_total_cents": 1},
         {"total_cents": 1},
         {"name": "Free burger"},
-        {"restaurant_id": str(uuid4())},
+        {"venue_id": str(uuid4())},
     ],
 )
 async def test_client_cannot_send_prices_or_extra_fields(
@@ -181,30 +184,35 @@ async def test_modifier_of_another_item_rejected(
     assert res.json()["detail"]["code"] == "modifier_not_found"
 
 
-async def test_modifier_of_another_restaurant_rejected(
+async def test_modifier_of_another_venue_rejected(
     client: httpx.AsyncClient, session: dict[str, Any], db: Conn
 ) -> None:
-    rid, cid, iid, gid, mid = (uuid4() for _ in range(5))
+    rid, cid, iid, gid, mid, tcid = (uuid4() for _ in range(6))
     await db.execute(
-        "insert into public.restaurants (id, slug, name) values (%s, 'other-bistro', 'Other')",
+        "insert into public.venues (id, slug, name) values (%s, 'other-bistro', 'Other')",
         (rid,),
     )
     await db.execute(
-        "insert into public.menu_categories (id, restaurant_id, name) values (%s, %s, 'C')",
+        "insert into public.menu_categories (id, venue_id, name) values (%s, %s, 'C')",
         (cid, rid),
     )
     await db.execute(
-        "insert into public.menu_items (id, restaurant_id, category_id, name, price_cents) "
-        "values (%s, %s, %s, 'Their burger', 100)",
-        (iid, rid, cid),
+        "insert into public.tax_categories (id, venue_id, name, rate_bps) "
+        "values (%s, %s, 'Food', 500)",
+        (tcid, rid),
     )
     await db.execute(
-        "insert into public.modifier_groups (id, restaurant_id, item_id, name) "
-        "values (%s, %s, %s, 'G')",
+        "insert into public.menu_items "
+        "(id, venue_id, category_id, tax_category_id, name, price_cents) "
+        "values (%s, %s, %s, %s, 'Their burger', 100)",
+        (iid, rid, cid, tcid),
+    )
+    await db.execute(
+        "insert into public.modifier_groups (id, venue_id, item_id, name) values (%s, %s, %s, 'G')",
         (gid, rid, iid),
     )
     await db.execute(
-        "insert into public.modifiers (id, restaurant_id, group_id, name) values (%s, %s, %s, 'M')",
+        "insert into public.modifiers (id, venue_id, group_id, name) values (%s, %s, %s, 'M')",
         (mid, rid, gid),
     )
     # Their modifier on our americano, and their item through our session.

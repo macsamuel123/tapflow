@@ -1,5 +1,5 @@
 {
-  "name": "restaurant-app",
+  "name": "tapflow",
   "private": true,
   "description": "Root tooling: Supabase CLI + dev process runner. App code lives in web/ and api/.",
   "packageManager": "pnpm@9.15.0",

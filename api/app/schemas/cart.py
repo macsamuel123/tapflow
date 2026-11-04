@@ -44,12 +44,21 @@ class CartLineOut(Outbound):
     problem: str | None
 
 
+class TaxLineOut(Outbound):
+    """Tax for one tax category: rounded half-up on that category's subtotal."""
+
+    name: str
+    rate_bps: int
+    subtotal_cents: int
+    tax_cents: int
+
+
 class CartResponse(Outbound):
     currency: str
     lines: list[CartLineOut]
     item_count: int
     subtotal_cents: int
-    tax_rate_bps: int
+    tax_breakdown: list[TaxLineOut]
     tax_cents: int
     tip_cents: int
     total_cents: int
