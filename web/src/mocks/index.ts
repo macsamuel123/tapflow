@@ -116,10 +116,17 @@ export const mockServices: Services = {
     async getSession() {
       return readState().session;
     },
-    async signUp({ password: _password, setup, ...input }) {
-      // The password is checked by the form and dropped here. Nothing stores it.
+    async signUp(input) {
+      // The password is checked by the form and not read here, so nothing stores it.
       const session: Session = { name: input.name.trim(), email: input.email.trim() };
-      const workspace = workspaceFromSignUp({ ...input, ...session, setup });
+      const workspace = workspaceFromSignUp({
+        industry: input.industry,
+        venueName: input.venueName.trim(),
+        country: input.country,
+        region: input.region,
+        setup: input.setup,
+        ...session,
+      });
       update((state) => {
         state.session = session;
         state.workspaces = [workspace, ...state.workspaces.filter((w) => w.id !== YOUR_VENUE_ID)];

@@ -49,7 +49,7 @@ export async function downloadQrPdf(venue: Venue, touchpoints: Touchpoint[], ori
     doc.text(fit(venue.name, textWidth), center, y + 14, { align: "center" });
 
     const matrix = qrMatrix(touchpointUrl(origin, venue, tp));
-    const module = QR_PT / matrix.size;
+    const cell = QR_PT / matrix.size;
     const left = center - QR_PT / 2;
     const top = y + 20;
     doc.setFillColor(0, 0, 0);
@@ -59,7 +59,7 @@ export async function downloadQrPdf(venue: Venue, touchpoints: Touchpoint[], ori
         let run = 1;
         while (mx + run < matrix.size && matrix.isDark(mx + run, my)) run += 1;
         // A hair of overlap stops white seams appearing between modules in print.
-        doc.rect(left + mx * module, top + my * module, run * module + 0.1, module + 0.1, "F");
+        doc.rect(left + mx * cell, top + my * cell, run * cell + 0.1, cell + 0.1, "F");
         mx += run - 1;
       }
     }
