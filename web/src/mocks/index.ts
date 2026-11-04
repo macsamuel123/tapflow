@@ -1,13 +1,18 @@
 import { DEFAULT_PICKUP_NAME } from "@/lib/industries";
 import { MAX_SPOTS, spotName } from "@/lib/service-setup";
+import { categoryNameError, sameName } from "@/lib/menu/rules";
 import { ServiceError } from "@/services/types";
 import type {
+  ImportResult,
+  MenuItem,
   OrderStatus,
   ServiceSetup,
   Services,
   Session,
   Touchpoint,
 } from "@/services/types";
+import { applyImport, ensureCategory, findCategory } from "./menu-ops";
+import { clearPhotos, deletePhoto, photoUrl, savePhoto } from "./photos";
 import { makePickup, makeSpot, slugify, workspaceFromSignUp, YOUR_VENUE_ID } from "./fixtures";
 import {
   activeWorkspace,
@@ -23,6 +28,20 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   accepted: ["ready", "cancelled"],
   ready: ["delivered", "picked_up"],
 };
+
+function findItem(workspace: Workspace, id: string): MenuItem | undefined {
+  return workspace.menu.flatMap((c) => c.items).find((i) => i.id === id);
+}
+
+function requireCategoryName(name: string): void {
+  const problem = categoryNameError(name);
+  if (problem) throw new ServiceError(problem);
+}
+
+function requireUniqueItem(workspace: Workspace, category: string, name: string, id: string | null): void {
+  const clash = findCategory(workspace.menu, category)?.items.find((i) => sameName(i.name, name) && i.id !== id);
+  if (clash) throw new ServiceError(`${category.trim()} already has ${clash.name}.`);
+}
 
 function current(): Workspace {
   return activeWorkspace(readState());
@@ -125,6 +144,7 @@ export const mockServices: Services = {
         country: input.country,
         region: input.region,
         setup: input.setup,
+        menuRows: input.menuRows,
         ...session,
       });
       update((state) => {
@@ -187,6 +207,7 @@ export const mockServices: Services = {
     },
     async resetDemo() {
       resetState();
+      await clearPhotos();
     },
   },
 
@@ -269,14 +290,123 @@ export const mockServices: Services = {
 
   menu: {
     async list() {
-      return current().menu;
+      return Promise.all(
+        current().menu.map(async (category) => ({
+          ...category,
+          items: await Promise.all(
+            category.items.map(async (item) => ({ ...item, photoUrl: await photoUrl(item.photoUrl) })),
+          ),
+        })),
+      );
+    },
+    async isSample() {
+      return current().sampleMenu;
+    },
+    async clearSample() {
+      const refs = current().menu.flatMap((c) => c.items.map((i) => i.photoUrl));
+      updateActive((workspace) => {
+        workspace.menu = [];
+        workspace.sampleMenu = false;
+      });
+      await Promise.all(refs.map(deletePhoto));
+    },
+    async addCategory(name) {
+      updateActive((workspace) => {
+        requireCategoryName(name);
+        if (findCategory(workspace.menu, name)) throw new ServiceError(`You already have ${name.trim()}.`);
+        ensureCategory(workspace.menu, name);
+      });
+    },
+    async renameCategory(id, name) {
+      updateActive((workspace) => {
+        requireCategoryName(name);
+        const clash = findCategory(workspace.menu, name);
+        if (clash && clash.id !== id) throw new ServiceError(`You already have ${name.trim()}.`);
+        const category = workspace.menu.find((c) => c.id === id);
+        if (!category) throw new ServiceError("That category no longer exists.");
+        category.name = name.trim();
+      });
+    },
+    async reorderCategories(orderedIds) {
+      updateActive((workspace) => {
+        const position = new Map(orderedIds.map((id, i) => [id, i]));
+        workspace.menu.sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0));
+      });
+    },
+    async deleteCategory(id) {
+      updateActive((workspace) => {
+        const category = workspace.menu.find((c) => c.id === id);
+        if (!category) return;
+        if (category.items.length > 0) {
+          const count = category.items.length === 1 ? "1 item" : `${category.items.length} items`;
+          throw new ServiceError(`${category.name} still has ${count}. Move or delete them first.`);
+        }
+        workspace.menu = workspace.menu.filter((c) => c.id !== id);
+      });
+    },
+    async addItem(input) {
+      const id = crypto.randomUUID();
+      updateActive((workspace) => {
+        requireUniqueItem(workspace, input.category, input.name, null);
+        const { category, ...fields } = input;
+        ensureCategory(workspace.menu, category).items.push({ ...fields, id, photoUrl: null });
+      });
+      return id;
+    },
+    async updateItem(id, input) {
+      updateActive((workspace) => {
+        requireUniqueItem(workspace, input.category, input.name, id);
+        const { category, ...fields } = input;
+        const source = workspace.menu.find((c) => c.items.some((i) => i.id === id));
+        const item = source?.items.find((i) => i.id === id);
+        if (!source || !item) throw new ServiceError("That item no longer exists.");
+        Object.assign(item, fields);
+        const target = ensureCategory(workspace.menu, category);
+        if (target !== source) {
+          source.items = source.items.filter((i) => i.id !== id);
+          target.items.push(item);
+        }
+      });
+    },
+    async deleteItem(id) {
+      const ref = findItem(current(), id)?.photoUrl ?? null;
+      updateActive((workspace) => {
+        for (const category of workspace.menu) {
+          category.items = category.items.filter((i) => i.id !== id);
+        }
+      });
+      await deletePhoto(ref);
     },
     async setInStock(itemId, inStock) {
       updateActive((workspace) => {
-        const item = workspace.menu.flatMap((c) => c.items).find((i) => i.id === itemId);
+        const item = findItem(workspace, itemId);
         if (!item) throw new ServiceError("That item no longer exists.");
         item.inStock = inStock;
       });
+    },
+    async setPhoto(itemId, photo) {
+      const previous = findItem(current(), itemId)?.photoUrl ?? null;
+      const ref = await savePhoto(photo);
+      updateActive((workspace) => {
+        const item = findItem(workspace, itemId);
+        if (item) item.photoUrl = ref;
+      });
+      await deletePhoto(previous);
+    },
+    async removePhoto(itemId) {
+      const previous = findItem(current(), itemId)?.photoUrl ?? null;
+      updateActive((workspace) => {
+        const item = findItem(workspace, itemId);
+        if (item) item.photoUrl = null;
+      });
+      await deletePhoto(previous);
+    },
+    async importRows(rows, onDuplicate) {
+      let result: ImportResult = { imported: 0, updated: 0, skipped: 0 };
+      updateActive((workspace) => {
+        result = applyImport(workspace.menu, rows, onDuplicate);
+      });
+      return result;
     },
   },
 

@@ -3,16 +3,24 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { ServiceSetupFields, type SetupForm } from "@/components/setup/ServiceSetupFields";
+import {
+  blankQuickItem,
+  hasQuickItemErrors,
+  isBlankQuickItem,
+  quickRows,
+  StepFirstItems,
+  type QuickItem,
+} from "@/components/signup/StepFirstItems";
 import { Button, FormError, SelectField, TextField } from "@/components/ui";
 import { defaultSetup, findIndustry, INDUSTRIES } from "@/lib/industries";
 import { COUNTRIES, REGIONS } from "@/lib/regions";
 import { parseSpotCount, validateSetup } from "@/lib/service-setup";
 import { emailError, passwordError } from "@/lib/validation";
 import { getServices } from "@/services";
-import { ServiceError, type CountryCode, type IndustryId } from "@/services/types";
+import { ServiceError, type CountryCode, type IndustryId, type MenuImportRow } from "@/services/types";
 
-const DRAFT_KEY = "tapflow:signup-draft";
-const STEP_COUNT = 4;
+const DRAFT_KEY = "tapflow:signup-draft:v2";
+const STEP_COUNT = 5;
 
 // Passwords are left out so they never reach browser storage.
 type Draft = {
@@ -23,6 +31,8 @@ type Draft = {
   country: CountryCode;
   region: string;
   setup: SetupForm;
+  quickItems: QuickItem[];
+  csvRows: MenuImportRow[];
 };
 
 function setupFor(industry: IndustryId | null): SetupForm {
@@ -39,6 +49,8 @@ function blankDraft(industry: IndustryId | null): Draft {
     country: "CA",
     region: "",
     setup: setupFor(industry),
+    quickItems: [blankQuickItem()],
+    csvRows: [],
   };
 }
 
@@ -79,11 +91,13 @@ export function SignupWizard() {
     region: draft.region ? undefined : "Choose one.",
   };
   const setupErrors = validateSetup(draft.setup, draft.setup.spotCount);
+  const quickValid = draft.quickItems.every((q) => isBlankQuickItem(q) || !hasQuickItemErrors(q));
   const complete = [
     draft.industry !== null,
     !Object.values(accountErrors).some(Boolean),
     !Object.values(venueErrors).some(Boolean),
     Object.keys(setupErrors).length === 0,
+    quickValid,
   ];
 
   // A step can't be reached by URL or reload until the ones before it are complete.
@@ -109,7 +123,7 @@ export function SignupWizard() {
     router.push(`/signup?${query.toString()}`);
   }
 
-  async function submit() {
+  async function submit(menuRows: MenuImportRow[]) {
     const spotCount = parseSpotCount(draft.setup.spotCount) ?? 0;
     if (!draft.industry) return;
     setBusy(true);
@@ -124,6 +138,7 @@ export function SignupWizard() {
         country: draft.country,
         region: draft.region,
         setup: { ...draft.setup, spotCount },
+        menuRows,
       });
       window.sessionStorage.removeItem(DRAFT_KEY);
       router.push("/signup/ready");
@@ -139,7 +154,7 @@ export function SignupWizard() {
       setAttempted(step);
       return;
     }
-    if (step === STEP_COUNT) void submit();
+    if (step === STEP_COUNT) void submit([...draft.csvRows, ...quickRows(draft.quickItems)]);
     else goTo(step + 1);
   }
 
@@ -270,6 +285,17 @@ export function SignupWizard() {
         </div>
       ) : null}
 
+      {step === 5 ? (
+        <StepFirstItems
+          quickItems={draft.quickItems}
+          csvRows={draft.csvRows}
+          currency={draft.country === "US" ? "USD" : "CAD"}
+          showErrors={showErrors}
+          onQuickItems={(quickItems) => patch({ quickItems })}
+          onCsvRows={(csvRows) => patch({ csvRows })}
+        />
+      ) : null}
+
       <FormError message={formError} />
 
       <div className="flex gap-2">
@@ -280,6 +306,11 @@ export function SignupWizard() {
           {step === STEP_COUNT ? "Create my QR codes" : "Continue"}
         </Button>
       </div>
+      {step === STEP_COUNT ? (
+        <Button variant="ghost" className="w-full" disabled={busy} onClick={() => void submit([])}>
+          Skip for now
+        </Button>
+      ) : null}
     </form>
   );
 }

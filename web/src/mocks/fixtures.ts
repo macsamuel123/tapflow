@@ -4,16 +4,20 @@ import type {
   CountryCode,
   IndustryId,
   MenuCategory,
+  MenuImportRow,
   MenuItem,
+  OptionGroup,
   Order,
   OrderStatus,
   ServiceMode,
   ServiceSetup,
   StaffMember,
+  TaxCategory,
   TaxRate,
   Touchpoint,
   Venue,
 } from "@/services/types";
+import { applyImport } from "./menu-ops";
 import type { Workspace } from "./store";
 
 export const BREWERY_ID = "demo-brewery";
@@ -59,10 +63,36 @@ function item(
   name: string,
   description: string,
   priceCents: number,
-  taxCategory: MenuItem["taxCategory"] = "Food",
-  inStock = true,
+  taxCategory: TaxCategory = "Food",
+  extras: Partial<Pick<MenuItem, "inStock" | "allergens" | "optionGroups">> = {},
 ): MenuItem {
-  return { id: id(), name, description, priceCents, taxCategory, inStock };
+  return {
+    id: id(),
+    name,
+    description,
+    priceCents,
+    taxCategory,
+    inStock: true,
+    allergens: [],
+    optionGroups: [],
+    photoUrl: null,
+    ...extras,
+  };
+}
+
+function pickOne(name: string, options: [string, number][]): OptionGroup {
+  return {
+    id: id(),
+    name,
+    required: true,
+    minPicks: 1,
+    maxPicks: 1,
+    options: options.map(([optionName, priceDeltaCents]) => ({ id: id(), name: optionName, priceDeltaCents })),
+  };
+}
+
+function addOns(name: string, options: [string, number][]): OptionGroup {
+  return { ...pickOne(name, options), required: false, minPicks: 0, maxPicks: options.length };
 }
 
 function breweryMenu(): MenuCategory[] {
@@ -71,18 +101,27 @@ function breweryMenu(): MenuCategory[] {
       id: id(),
       name: "On tap",
       items: [
-        item("Harbour Lager", "Crisp and clean, 5.0%.", 800, "Alcohol"),
-        item("Cedar IPA", "Pine and citrus, 6.5%.", 900, "Alcohol"),
-        item("Night Shift Stout", "Coffee and dark chocolate, 5.8%.", 900, "Alcohol", false),
-        item("Tasting flight", "Four small pours of your choice.", 1400, "Alcohol"),
+        item("Harbour Lager", "Crisp and clean, 5.0%.", 800, "Alcohol", {
+          allergens: ["gluten"],
+          optionGroups: [pickOne("Size", [["Half pint", 0], ["Pint", 200]])],
+        }),
+        item("Cedar IPA", "Pine and citrus, 6.5%.", 900, "Alcohol", { allergens: ["gluten"] }),
+        item("Night Shift Stout", "Coffee and dark chocolate, 5.8%.", 900, "Alcohol", {
+          inStock: false,
+          allergens: ["gluten", "milk"],
+        }),
+        item("Tasting flight", "Four small pours of your choice.", 1400, "Alcohol", { allergens: ["gluten"] }),
       ],
     },
     {
       id: id(),
       name: "Bites",
       items: [
-        item("Soft pretzel", "Baked here, with beer mustard.", 900),
-        item("Smash burger", "Double patty, pickles, house sauce.", 1800),
+        item("Soft pretzel", "Baked here, with beer mustard.", 900, "Food", { allergens: ["gluten", "mustard"] }),
+        item("Smash burger", "Double patty, pickles, house sauce.", 1800, "Food", {
+          allergens: ["gluten", "milk", "egg", "sesame"],
+          optionGroups: [addOns("Add-ons", [["Bacon", 300], ["Extra cheese", 150]])],
+        }),
         item("Crispy wings", "Eight wings with hot honey.", 1600),
       ],
     },
@@ -103,10 +142,17 @@ function foodMenu(): MenuCategory[] {
       id: id(),
       name: "Mains",
       items: [
-        item("Birria tacos", "Three tacos with consomme for dipping.", 1600),
-        item("Crispy fish tacos", "Lime slaw and chipotle crema.", 1500),
-        item("Loaded fries", "Cheese, green onion, house sauce.", 1100),
-        item("Veggie burrito", "Black beans, rice, roasted peppers.", 1400, "Food", false),
+        item("Birria tacos", "Three tacos with consomme for dipping.", 1600, "Food", {
+          optionGroups: [pickOne("Spice level", [["Mild", 0], ["Hot", 0]])],
+        }),
+        item("Crispy fish tacos", "Lime slaw and chipotle crema.", 1500, "Food", {
+          allergens: ["fish", "gluten", "egg", "milk"],
+        }),
+        item("Loaded fries", "Cheese, green onion, house sauce.", 1100, "Food", { allergens: ["milk"] }),
+        item("Veggie burrito", "Black beans, rice, roasted peppers.", 1400, "Food", {
+          inStock: false,
+          allergens: ["gluten"],
+        }),
       ],
     },
     {
@@ -120,7 +166,7 @@ function foodMenu(): MenuCategory[] {
   ];
 }
 
-function taxFor(lines: { amount: number; category: MenuItem["taxCategory"] }[]): number {
+function taxFor(lines: { amount: number; category: TaxCategory }[]): number {
   // Same rule as the API: each tax rounds half-up on its own pre-tax base.
   const total = (lines_: typeof lines) => lines_.reduce((sum, l) => sum + l.amount, 0);
   const halfUp = (base: number, bps: number) => {
@@ -226,6 +272,7 @@ export function demoBrewery(): Workspace {
     staff: sampleStaff({ name: "Sam Rivera", email: "sam@demobrewery.test" }, "demobrewery.test"),
     payment: { connected: true, accountLabel: "Demo Brewery (test account)" },
     taxes: [GST, PST],
+    sampleMenu: true,
   };
 }
 
@@ -242,6 +289,7 @@ export function demoFoodTruck(): Workspace {
     staff: sampleStaff({ name: "Ana Torres", email: "ana@demotruck.test" }, "demotruck.test"),
     payment: { connected: false, accountLabel: null },
     taxes: [GST, PST],
+    sampleMenu: true,
   };
 }
 
@@ -253,6 +301,7 @@ export function workspaceFromSignUp(input: {
   country: CountryCode;
   region: string;
   setup: ServiceSetup;
+  menuRows: MenuImportRow[];
 }): Workspace {
   const { setup } = input;
   const touchpoints = [
@@ -261,16 +310,20 @@ export function workspaceFromSignUp(input: {
       : []),
     ...(setup.pickupEnabled ? [makePickup(setup.pickupName.trim() || DEFAULT_PICKUP_NAME)] : []),
   ];
-  const menu = input.industry === "breweries" ? breweryMenu() : foodMenu();
+  // Sample orders always come from a sample menu. The venue's own menu replaces it if it has one.
+  const sample = input.industry === "breweries" ? breweryMenu() : foodMenu();
+  const own: MenuCategory[] = [];
+  applyImport(own, input.menuRows, "update");
   return {
     id: YOUR_VENUE_ID,
     venue: venue(input.venueName, slugify(input.venueName), input.industry, input.country, input.region),
     spotType: setup.spotType,
     touchpoints,
-    orders: sampleOrders(menu, touchpoints),
-    menu,
+    orders: sampleOrders(sample, touchpoints),
+    menu: own.length ? own : sample,
     staff: sampleStaff({ name: input.name, email: input.email }, "example.test"),
     payment: { connected: false, accountLabel: null },
     taxes: [GST, PST],
+    sampleMenu: own.length === 0,
   };
 }

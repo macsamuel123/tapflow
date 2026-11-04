@@ -68,16 +68,64 @@ export type OrderSummary = {
   averageTicketCents: number;
 };
 
+export type TaxCategory = "Food" | "Alcohol";
+
+/** The same codes as menu_items.allergens in the database. */
+export type AllergenId =
+  | "milk"
+  | "egg"
+  | "fish"
+  | "crustacean"
+  | "tree_nut"
+  | "peanut"
+  | "gluten"
+  | "soy"
+  | "sesame"
+  | "mustard"
+  | "sulphites";
+
+export type MenuOption = { id: string; name: string; priceDeltaCents: number };
+
+export type OptionGroup = {
+  id: string;
+  name: string;
+  required: boolean;
+  minPicks: number;
+  maxPicks: number;
+  options: MenuOption[];
+};
+
 export type MenuItem = {
   id: string;
   name: string;
   description: string;
   priceCents: number;
-  taxCategory: "Food" | "Alcohol";
+  taxCategory: TaxCategory;
   inStock: boolean;
+  allergens: AllergenId[];
+  optionGroups: OptionGroup[];
+  photoUrl: string | null;
 };
 
 export type MenuCategory = { id: string; name: string; items: MenuItem[] };
+
+/** What a form saves. `category` is a name: a new name creates the category. */
+export type MenuItemInput = Omit<MenuItem, "id" | "photoUrl"> & { category: string };
+
+/** One imported item. Null keeps the current value when a duplicate is updated. */
+export type MenuImportRow = {
+  category: string;
+  name: string;
+  priceCents: number;
+  taxCategory: TaxCategory;
+  description: string | null;
+  soldOut: boolean | null;
+  allergens: AllergenId[] | null;
+};
+
+export type DuplicateMode = "skip" | "update";
+
+export type ImportResult = { imported: number; updated: number; skipped: number };
 
 export type StaffMember = { id: string; name: string; email: string; role: StaffRole };
 
@@ -96,6 +144,8 @@ export type SignUpInput = {
   country: CountryCode;
   region: string;
   setup: ServiceSetup;
+  /** Empty when step 5 was skipped: the venue starts with the sample menu. */
+  menuRows: MenuImportRow[];
 };
 
 export type VenueDetails = Pick<Venue, "name" | "country" | "region">;
@@ -139,7 +189,19 @@ export interface OrderService {
 
 export interface MenuService {
   list(): Promise<MenuCategory[]>;
+  isSample(): Promise<boolean>;
+  clearSample(): Promise<void>;
+  addCategory(name: string): Promise<void>;
+  renameCategory(id: string, name: string): Promise<void>;
+  reorderCategories(orderedIds: string[]): Promise<void>;
+  deleteCategory(id: string): Promise<void>;
+  addItem(input: MenuItemInput): Promise<string>;
+  updateItem(id: string, input: MenuItemInput): Promise<void>;
+  deleteItem(id: string): Promise<void>;
   setInStock(itemId: string, inStock: boolean): Promise<void>;
+  setPhoto(itemId: string, photo: Blob): Promise<void>;
+  removePhoto(itemId: string): Promise<void>;
+  importRows(rows: MenuImportRow[], onDuplicate: DuplicateMode): Promise<ImportResult>;
 }
 
 export interface StaffService {

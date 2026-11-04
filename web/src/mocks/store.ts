@@ -1,3 +1,4 @@
+import { ServiceError } from "@/services/types";
 import type {
   MenuCategory,
   Order,
@@ -21,6 +22,8 @@ export type Workspace = {
   staff: StaffMember[];
   payment: PaymentStatus;
   taxes: TaxRate[];
+  /** True until the sample menu is cleared, so the button stays available after edits. */
+  sampleMenu: boolean;
 };
 
 export type DemoState = {
@@ -30,7 +33,7 @@ export type DemoState = {
 };
 
 // Passwords are never kept. Bump the version when the shape of the state changes.
-const STORAGE_KEY = "tapflow:demo:v1";
+const STORAGE_KEY = "tapflow:demo:v2";
 
 function freshWorkspaces(): Workspace[] {
   return [demoBrewery(), demoFoodTruck()];
@@ -55,7 +58,10 @@ export function readState(): DemoState {
 export function writeState(state: DemoState): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "QuotaExceededError") {
+      throw new ServiceError("This browser's demo storage is full. Reset the demo in Settings to free it up.");
+    }
     // Private browsing: the demo still runs, but changes last only for this page.
   }
 }
