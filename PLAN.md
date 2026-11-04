@@ -164,7 +164,7 @@ Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `
 
 **Owner onboarding.** A first sign-in with no membership shows a "Create venue" form. The seed creates a demo owner and fulfillment user.
 
-**CSV import.** Columns: `category,name,description,price_cents,ingredients,allergens,dietary_tags`. List fields are separated by `|`. It sits behind a `MenuImporter` interface (vision import later).
+**CSV import.** Columns: `category,name,description,price,tax_type,sold_out,allergens`. `price` is in dollars and is converted to integer cents, `tax_type` is `food` or `alcohol`, and `allergens` is pipe-separated. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
 
 ## 5. Deviations and gaps vs the BRD
 
@@ -232,8 +232,9 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | M1 | Foundation: scaffold, migrations + RLS + seed, FastAPI health, `.env.example`, Makefile | `make dev` runs web + api + Supabase; RLS cross-tenant test passes |
 | M2 | Scan / menu / cart: QR tokens, sessions, menu page, modifier picker, server-priced cart | pytest covers tokens, modifier rules, pricing math |
 | S0 | SaaS scaffold on `saas-scaffold`: marketing site, sign-up with service setup, printable QR codes and venue dashboard, as a clickable mock with `NEXT_PUBLIC_DEMO_MODE=true` (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px, branch ready for a Vercel preview |
+| S0.1 | Menu builder on the mock: sign-up step 5, categories, items, photos, options, allergens and CSV import (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px |
 | M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, pickup (see §12), tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
-| M4 | Owner dashboard + polish: menu CRUD + CSV, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
+| M4 | Owner dashboard + polish: wire the S0.1 menu builder to the API, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
 | M5 | Admin & Ops: `/admin` panel, tagged Playwright suites, `tests.yml` nightly and on demand, `/admin/ops` with run buttons, failure alerts, manual release checklist, staging smoke test (see §11) | A failing nightly run sends an alert and appears on `/admin/ops` with its report; each suite runs alone from a Run button |
 
 After each milestone: what was built, how to run and test it, what's stubbed, what's next, with lint and test summaries.
@@ -325,3 +326,11 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 - `guest_name` is a new client-sent field, required only at pickup touchpoints and validated by the API. Invariant 1 needs a non-financial exception for it, and invariant 4 needs the new transition.
 - `app.can_read_order`: runners don't see `ready` pickup orders. Fulfillment's "closed today" rule includes `picked_up`.
 - Tests: pgTAP for the status guard and role visibility, API tests for checkout, Playwright for the pickup path.
+
+**S0.1 menu builder** (mock only). Owners build a menu in sign-up step 5 or on the dashboard Menu page. Photos stay in the browser's IndexedDB, because `localStorage` is too small; the rest of the demo state stays in `localStorage`.
+
+**To carry into the real menu (M4):**
+- Option groups already follow the database: maximum picks 1 to 20, required means minimum of at least 1, optional means a minimum of 0, and option prices can't be negative.
+- The price limit of 10,000.00 and the 300-character description limit are UI rules. The API needs to enforce them too, because the database doesn't.
+- Allergens are on the item form, the item card and the CSV. The mock stores the database codes (`menu_items.allergens`). The checklist omits `shellfish` (molluscs), which the database has, so decide whether to add it before going live.
+- `ingredients` and `dietary_tags` are still deferred.
