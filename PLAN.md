@@ -234,6 +234,7 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | S0 | SaaS scaffold on `saas-scaffold`: marketing site, sign-up with service setup, printable QR codes and venue dashboard, as a clickable mock with `NEXT_PUBLIC_DEMO_MODE=true` (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px, branch ready for a Vercel preview |
 | S0.1 | Menu builder on the mock: sign-up step 5, categories, items, photos, options, allergens and CSV import (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px |
 | S0.2 | Guest experience on the mock: scan, menu, cart, mock order and order status (see §12) | Lint clean, `make test` passes, Playwright `@saas`, a demo QR completes an order in a fresh browser |
+| S0.3 | Shared demo backend: guest phone to dashboard, live, on Supabase Cloud with mock payments (see §12) | Lint clean, `make test`, `make e2e-saas` and `make e2e-cloud` pass, verified on production with two browsers |
 | M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, pickup (see §12), tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
 | M4 | Owner dashboard + polish: wire the S0.1 menu builder to the API, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
 | M5 | Admin & Ops: `/admin` panel, tagged Playwright suites, `tests.yml` nightly and on demand, `/admin/ops` with run buttons, failure alerts, manual release checklist, staging smoke test (see §11) | A failing nightly run sends an alert and appears on `/admin/ops` with its report; each suite runs alone from a Run button |
@@ -340,3 +341,14 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 **S0.2 guest experience** (mock only). In demo mode `/v/{slug}/p/{id}?token=` redirects to `/demo/v/...`, and no `/v` page changes. Demo Brewery and Demo Food Truck have fixed slugs, touchpoint ids and `demo` tokens, and their menus load from code, so a printed demo QR works in any browser. The tester's own venue stays in one browser. Cross-device tracking waits for Supabase Realtime: the demo updates within one browser, and a "simulate" toggle stands in for staff.
 
 `web/src/lib/pricing.ts` is the TypeScript twin of `domain/pricing.py`, and both run `testdata/pricing-cases.json`. It's for demo mode only: in the live product every amount still comes from the API (invariant 1).
+
+**S0.3 shared demo backend.** With `NEXT_PUBLIC_DEMO_CLOUD=true`, Demo Brewery and Demo Food Truck share orders across devices through Supabase Cloud. Without it, the same-browser mode from S0.2 keeps working. A tester's own venue stays in one browser.
+- A separate `demo` schema, in `supabase/demo/`, isolated from the real tables. It's applied with `supabase db query --linked -f`, so it writes no migration history and M3's `db push` starts clean.
+- Writes go through Next.js handlers at `/demo/api/*` with the service-role key. The server reprices every order from the code menus with `pricing.ts` and ignores client totals. It validates the token, touchpoint and status steps, and rate limits per IP in Postgres, because serverless instances share no memory.
+- Browsers read with the public key and Realtime. RLS lets `anon` SELECT only, and the write functions can't be called by `anon`. If Realtime drops, clients poll every 5 seconds, and the dashboard shows Live, Polling or Offline.
+- Demo venue menus and touchpoints are read-only. Sold-out is the exception: `demo.item_stock` is shared, so a toggle reaches guest phones live.
+- Orders and sold-out overrides are deleted after 24 hours by `pg_cron`. A daily Vercel cron calls `/demo/api/keepalive` so a free Supabase project doesn't pause from inactivity.
+
+**Carries into M3:** the Supabase Cloud project, the Realtime and polling pattern, and server-side repricing. The `demo` schema itself doesn't carry over and can be dropped when the demo retires.
+
+**Known limits:** `anon` can read all demo orders, including first names, and login is mocked, so anyone can change a shared order's status. Testers on one wifi share a rate limit.

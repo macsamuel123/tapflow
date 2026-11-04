@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 SUPABASE := pnpm exec supabase
 
-.PHONY: help install dev stop seed test test-api test-db e2e-saas lint lint-api lint-web types qr-urls
+.PHONY: help install dev stop seed test test-api test-db demo-db e2e-saas e2e-cloud lint lint-api lint-web types qr-urls
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -36,6 +36,12 @@ test-db: ## pgTAP tests (RLS, grants, status guard) — needs `supabase start`
 	if [ "$$status" -ne 0 ] || ! grep -qx 'Result: PASS' <<<"$$out"; then \
 		echo "test-db: pgTAP did not report 'Result: PASS' (exit $$status)" >&2; exit 1; \
 	fi
+
+demo-db: ## Load supabase/demo/*.sql into the local database (safe to re-run)
+	cat supabase/demo/001_schema.sql supabase/demo/002_functions.sql | docker exec -i supabase_db_tapflow psql -q -U postgres -v ON_ERROR_STOP=1 >/dev/null
+
+e2e-cloud: demo-db ## Shared demo flow against local Supabase (S0.3)
+	./scripts/e2e-cloud.sh
 
 e2e-saas: ## S0 demo flow at 390px (production build; no API or Supabase needed)
 	pnpm --dir web exec playwright test --grep @saas
