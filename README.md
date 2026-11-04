@@ -28,6 +28,6 @@ Local services:
 - Supabase Studio: http://localhost:54323
 - Magic-link inbox (Inbucket/Mailpit): http://localhost:54324
 
-Demo staff logins (magic link): `owner@demo.test`, `fulfillment@demo.test`.
+Demo logins (magic link): `owner@demo.test`, `manager@demo.test`, `fulfillment@demo.test`, `runner@demo.test`, and the platform admin `admin@tapflow.test`.
 
 The full README (architecture diagram and demo script) comes in M4.

@@ -24,7 +24,7 @@ flowchart LR
 ```
 
 - **Diners** never write to Supabase directly. They get menus from the API. Anon Realtime is SELECT-only on the menu touchpoints, so 86 updates arrive live. Order status reaches the diner through an API-sent Realtime **Broadcast** on `order:{order_id}`, with payload **`{status, ticket_number}` only**. A GET-endpoint poll is the fallback. Anon can never read `orders`.
-- **Staff** (owner, fulfillment, runners) sign in with a Supabase magic link. The KDS and runner views subscribe to `orders` via `postgres_changes`, and RLS decides what each user can see. Every write (status changes, 86, CRUD) goes through the API. The API verifies the Supabase JWT and checks `staff_members` membership before writing.
+- **Staff** (owner, manager, fulfillment, runner) and **platform admins** sign in with a Supabase magic link. The KDS and runner views subscribe to `orders` via `postgres_changes`, and RLS decides what each user can see. Every write (status changes, 86, CRUD) goes through the API. The API verifies the Supabase JWT and checks `staff_members` membership before writing.
 - **API DB access:** psycopg 3 async pool, hand-written SQL in `repositories/`, Pydantic v2 at every boundary.
 - **Next.js rewrites** `/api/*` → FastAPI, so the browser sees one origin and a single tunnel covers both.
 
@@ -65,7 +65,7 @@ restaurant_app/
 
 ## 3. Data model
 
-Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`, `tax_category_taxes`, `menu_categories`, `menu_items`, `modifier_groups`, `modifiers`, `touchpoint_sessions`, `cart_items`, `orders`, `order_items`, `order_tax_lines`, `stripe_events`, `ticket_counters`. (`chat_messages` and `ai_audit_log` are Phase 2.)
+Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`, `tax_category_taxes`, `menu_categories`, `menu_items`, `modifier_groups`, `modifiers`, `touchpoint_sessions`, `cart_items`, `orders`, `order_items`, `order_tax_lines`, `venue_payment_settings`, `order_payments`, `platform_admins`, `stripe_events`, `ticket_counters`. (`chat_messages` and `ai_audit_log` are Phase 2.)
 
 | Detail | Why |
 |---|---|
@@ -75,7 +75,9 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 | `venue_id` on `modifier_groups` and `modifiers` (denormalized). **Composite FKs** `(parent_id, venue_id)` → `parent(id, venue_id)` on items→categories, groups→items, modifiers→groups, orders/sessions→touchpoints. | RLS without joins; Realtime filter `venue_id=eq.X`. The DB rejects cross-tenant links outright (stronger and simpler than a trigger). |
 | `orders_status_guard` trigger | A second, DB-level enforcement of the status machine. It also stamps `*_at` timestamps. |
 | `sort_order` on categories, items, groups and modifiers; `updated_at` on mutable touchpoints | Stable ordering; cache busting |
-| `staff_members` PK `(user_id, venue_id)`, role `owner \| fulfillment` | A user can work at several venues. Runners use the `fulfillment` role for MVP (a `runner` role can be added later). |
+| `staff_members` PK `(user_id, venue_id)`, role `owner \| manager \| fulfillment \| runner` | A user can work at several venues, with one role per venue. |
+| `platform_admins(user_id)` | The TapFlow team. Separate from venue roles, with read-only RLS across venues. Rows are managed outside the app. |
+| `venue_payment_settings` (platform fee, Stripe account, charges enabled) and `order_payments` (platform fee, PaymentIntent id) | All staff share the `authenticated` Postgres role, so column grants can't separate owners from managers. Payment data lives in its own tables with owner-only policies. A trigger creates the settings row for every venue. M3 checkout must keep `platform_fee_cents <= total_cents`, because a check can't span tables. |
 | `order_status` enum: `pending_payment \| paid \| accepted \| ready \| delivered \| cancelled` | Delivery workflow |
 | `orders` timestamps: `paid_at`, `accepted_at`, `ready_at`, `delivered_at`, `cancelled_at`, plus `status_updated_at` | Fulfillment and service timing |
 | `orders.ticket_number` + `ticket_date`; touchpoint `ticket_counters(venue_id, local_date, last_number)` | Short ticket numbers that **reset daily per venue (venue-local date)**. Assigned atomically at *paid* via `app.next_ticket_number()`. Unique index on `(venue_id, ticket_date, ticket_number)`. |
@@ -85,8 +87,20 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 | CHECKs: all `*_cents >= 0`, `quantity BETWEEN 1 AND 20`, `0 <= min_select <= max_select`, bps 0–10000 | The DB backs up the invariants |
 
 **RLS summary.** RLS is enabled on every touchpoint.
-- `anon`: SELECT on `menu_categories`, `menu_items`, `modifier_groups` and `modifiers` only.
-- Staff (`authenticated`): SELECT on their venues' rows via `app.is_staff_of(venue_id)`. Orders are visible to staff only when `status <> 'pending_payment'` (tickets only after payment, enforced at the DB layer).
+- `anon`: SELECT on `menu_categories`, `menu_items`, `modifier_groups`, `modifiers`, `tax_categories`, `taxes` and `tax_category_taxes` only.
+- Staff (`authenticated`): SELECT on their venues' rows via `app.is_staff_of(venue_id)`. Order visibility comes from `app.can_read_order`, and `order_items` and `order_tax_lines` follow it.
+
+| Role | Orders | Payment data |
+|---|---|---|
+| Owner | Every paid order of the venue | Yes |
+| Manager | Every paid order of the venue, including history | No |
+| Fulfillment | `paid`, `accepted`, `ready`, plus orders delivered or cancelled today (venue local time) | No |
+| Runner | `ready` only | No |
+| Platform admin | Every order of every venue, including `pending_payment` and abandoned checkouts | Yes, read-only |
+
+- Venue staff never see an unpaid order. The rule tests `paid_at`, not status, so a checkout that re-checkout cancelled stays hidden too.
+- A runner loses sight of an order once it's delivered, so Realtime can't tell other runners. The runner view must refresh by polling (M3).
+- Platform admins read through their own policies, never a service-role bypass. Their writes go through the API, and `qr_secret` stays hidden from them.
 - `touchpoints`: staff can read labels (tickets need them). `qr_secret` is excluded by column grants. Writes (create, rotate) are owner-only, via the API.
 - `staff_members`: your own rows, or every row of a venue you own.
 - Clients get **no INSERT/UPDATE/DELETE grants on any touchpoint**. All writes go through the API.
@@ -106,7 +120,7 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 - `total = subtotal + tax + tip`. Prices are tax-exclusive. Tips are added but never taxed. `round_half_up = (n*bps + 5000) // 10000`.
 - Orders persist their breakdown in `order_tax_lines` at checkout (M3), not only `tax_cents`.
 
-**Checkout.** Requires a verified session, a non-empty cart, `stripe_charges_enabled`, and a stock re-check. In one transaction it creates a `pending_payment` order with snapshots. It then creates the PaymentIntent with `automatic_payment_methods`, `application_fee_amount`, `transfer_data.destination`, `metadata.order_id`, and idempotency key = order id. Each session has at most one pending order. **On re-checkout**:
+**Checkout.** Requires a verified session, a non-empty cart, `venue_payment_settings.stripe_charges_enabled`, and a stock re-check. In one transaction it creates a `pending_payment` order with snapshots. It then creates the PaymentIntent with `automatic_payment_methods`, `application_fee_amount`, `transfer_data.destination`, `metadata.order_id`, and idempotency key = order id. Each session has at most one pending order. **On re-checkout**:
 - If the existing PaymentIntent is `requires_payment_method` or `requires_confirmation`, cancel it and the old order, then create new ones.
 - If it's `processing` or `succeeded`, reuse it and create nothing.
 - Any other status (e.g. `requires_action`) → reuse it.
@@ -114,7 +128,7 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 **Webhook.** Verify the signature, then in one transaction `INSERT INTO stripe_events … ON CONFLICT DO NOTHING` (already seen → 200 no-op).
 - `payment_intent.succeeded`: assert amount and currency match, set `paid`, `paid_at` and the daily `ticket_number`, clear the cart, broadcast.
 - `payment_failed`: the order stays pending; log it.
-- `account.updated`: sync `stripe_charges_enabled`.
+- `account.updated`: sync `venue_payment_settings.stripe_charges_enabled`.
 
 **Order status machine** (`domain/order_status.py`, server-validated):
 ```
@@ -205,6 +219,7 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | pytest unit | Pricing and rounding; QR tokens; cart/modifier rules; **order status transition matrix** (every from→to pair); re-checkout PaymentIntent reuse/cancel matrix; daily ticket reset across a timezone boundary; webhook signature, idempotency and amount mismatch |
 | pytest integration | Local Supabase Postgres; each test's transaction is rolled back |
 | pgTAP | `rls_cross_tenant.test.sql`: staff of A can't read B's orders; staff can't see `pending_payment`; anon can't read orders or `qr_secret` |
+| pgTAP | `rls_roles.test.sql`: visibility per role, managers can't see payouts or Stripe settings, runners see only ready orders, fulfillment's today cutoff in venue local time, platform admins read across venues including `pending_payment` and can't write, venue staff can't read `platform_admins` |
 | Playwright (M3) | Scan QR URL → add items → pay 4242 → KDS **Accept → Ready → Delivered** (runner view), with the diner page showing Paid → Being prepared → On its way → Delivered |
 | Static | ruff, mypy `--strict`, eslint, `tsc --noEmit` |
 

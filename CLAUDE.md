@@ -41,12 +41,12 @@ Run `make lint` and `make test` before calling a milestone done, and report the 
    → `api/tests/unit/test_pricing.py`, `api/tests/integration/test_checkout.py`
 2. **Cart rules validated server-side.** The item exists, belongs to this venue, and is in stock. Every modifier belongs to that item. Required groups are satisfied, min/max selections respected, quantity 1–20. Extra or unknown fields are rejected.
    → `api/tests/unit/test_cart_rules.py`
-3. **Tickets only after payment.** An order reaches `paid` (and becomes visible to staff) only through the signature-verified, idempotent `payment_intent.succeeded` webhook. RLS hides `pending_payment` from staff.
-   → `api/tests/integration/test_webhooks.py`, `supabase/tests/rls_cross_tenant.test.sql`
+3. **Tickets only after payment.** An order reaches `paid` (and becomes visible to staff) only through the signature-verified, idempotent `payment_intent.succeeded` webhook. RLS hides unpaid orders from venue staff, including abandoned checkouts. Platform admins can read them, read-only, for support.
+   → `api/tests/integration/test_webhooks.py`, `supabase/tests/rls_cross_tenant.test.sql`, `supabase/tests/rls_roles.test.sql`
 4. **Valid status transitions only.** `paid → accepted → ready → delivered`; `cancelled` only from `paid` or `accepted`. Staff can never set `paid`. Each transition stamps its timestamp.
    → `api/tests/unit/test_order_status.py`
-5. **Tenant isolation via RLS** on every tenant touchpoint. Staff only see their own venues. `touchpoints.qr_secret` is never readable by clients.
-   → `supabase/tests/rls_cross_tenant.test.sql`
+5. **Tenant isolation via RLS** on every tenant touchpoint. Staff only see their own venues. `touchpoints.qr_secret` is never readable by clients. Roles are owner, manager, fulfillment and runner; only owners and platform admins read payment data. Platform admins (`platform_admins`, not a venue role) read across venues through their own policies and never write directly.
+   → `supabase/tests/rls_cross_tenant.test.sql`, `supabase/tests/rls_roles.test.sql`
 6. **Signed QR tokens.** `token = base64url(HMAC_SHA256(touchpoint.qr_secret, f"{rest_slug}:{touchpoint_id}"))`. Valid → verified session (can check out). Missing or invalid → browse only; checkout disabled with "scan the QR on your touchpoint". Rotating the secret invalidates old QRs.
    → `api/tests/unit/test_qr_tokens.py`, `api/tests/integration/test_sessions.py`
 

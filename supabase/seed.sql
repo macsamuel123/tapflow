@@ -14,22 +14,40 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000001', 'authenticated', 'authenticated',
    'owner@demo.test', '', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', ''),
   ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000002', 'authenticated', 'authenticated',
-   'fulfillment@demo.test', '', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', '');
+   'fulfillment@demo.test', '', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000003', 'authenticated', 'authenticated',
+   'manager@demo.test', '', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000004', 'authenticated', 'authenticated',
+   'runner@demo.test', '', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', ''),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-4000-8000-000000000005', 'authenticated', 'authenticated',
+   'admin@tapflow.test', '', now(), '{"provider":"email","providers":["email"]}', '{}', now(), now(), '', '', '', '');
 
 insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
 values
   (gen_random_uuid(), 'a0000000-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-000000000001',
    '{"sub":"a0000000-0000-4000-8000-000000000001","email":"owner@demo.test","email_verified":true}', 'email', now(), now(), now()),
   (gen_random_uuid(), 'a0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000002',
-   '{"sub":"a0000000-0000-4000-8000-000000000002","email":"fulfillment@demo.test","email_verified":true}', 'email', now(), now(), now());
+   '{"sub":"a0000000-0000-4000-8000-000000000002","email":"fulfillment@demo.test","email_verified":true}', 'email', now(), now(), now()),
+  (gen_random_uuid(), 'a0000000-0000-4000-8000-000000000003', 'a0000000-0000-4000-8000-000000000003',
+   '{"sub":"a0000000-0000-4000-8000-000000000003","email":"manager@demo.test","email_verified":true}', 'email', now(), now(), now()),
+  (gen_random_uuid(), 'a0000000-0000-4000-8000-000000000004', 'a0000000-0000-4000-8000-000000000004',
+   '{"sub":"a0000000-0000-4000-8000-000000000004","email":"runner@demo.test","email_verified":true}', 'email', now(), now(), now()),
+  (gen_random_uuid(), 'a0000000-0000-4000-8000-000000000005', 'a0000000-0000-4000-8000-000000000005',
+   '{"sub":"a0000000-0000-4000-8000-000000000005","email":"admin@tapflow.test","email_verified":true}', 'email', now(), now(), now());
+
+-- TapFlow team, not venue staff.
+insert into public.platform_admins (user_id) values ('a0000000-0000-4000-8000-000000000005');
 
 -- ---------------------------------------------------------------- venue
-insert into public.venues (id, slug, name, currency, timezone, platform_fee_bps)
-values ('b0000000-0000-4000-8000-000000000001', 'demo-bistro', 'Demo Bistro', 'CAD', 'America/Vancouver', 300);
+-- A trigger creates its venue_payment_settings row (platform fee 300 bps by default).
+insert into public.venues (id, slug, name, currency, timezone)
+values ('b0000000-0000-4000-8000-000000000001', 'demo-bistro', 'Demo Bistro', 'CAD', 'America/Vancouver');
 
 insert into public.staff_members (user_id, venue_id, role) values
   ('a0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'owner'),
-  ('a0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001', 'fulfillment');
+  ('a0000000-0000-4000-8000-000000000002', 'b0000000-0000-4000-8000-000000000001', 'fulfillment'),
+  ('a0000000-0000-4000-8000-000000000003', 'b0000000-0000-4000-8000-000000000001', 'manager'),
+  ('a0000000-0000-4000-8000-000000000004', 'b0000000-0000-4000-8000-000000000001', 'runner');
 
 -- ---------------------------------------------------------------- tax categories
 insert into public.taxes (id, venue_id, code, name, rate_bps) values

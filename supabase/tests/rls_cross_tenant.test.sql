@@ -39,16 +39,16 @@ insert into public.menu_items (venue_id, category_id, tax_category_id, name, pri
   ('20000000-0000-4000-8000-00000000000a', '40000000-0000-4000-8000-00000000000a', '60000000-0000-4000-8000-00000000000a', 'Test Dish', 1000);
 
 insert into public.orders
-  (id, venue_id, touchpoint_id, status, currency, subtotal_cents, tax_cents, platform_fee_cents, total_cents,
+  (id, venue_id, touchpoint_id, status, currency, subtotal_cents, tax_cents, total_cents,
    paid_at, ticket_number, ticket_date) values
   -- A: one paid, one pending
   ('50000000-0000-4000-8000-0000000000a1', '20000000-0000-4000-8000-00000000000a', '30000000-0000-4000-8000-00000000000a',
-   'paid', 'CAD', 1000, 50, 30, 1050, now(), 1, current_date),
+   'paid', 'CAD', 1000, 50, 1050, now(), 1, current_date),
   ('50000000-0000-4000-8000-0000000000a2', '20000000-0000-4000-8000-00000000000a', '30000000-0000-4000-8000-00000000000a',
-   'pending_payment', 'CAD', 1000, 50, 30, 1050, null, null, null),
+   'pending_payment', 'CAD', 1000, 50, 1050, null, null, null),
   -- B: one paid
   ('50000000-0000-4000-8000-0000000000b1', '20000000-0000-4000-8000-00000000000b', '30000000-0000-4000-8000-00000000000b',
-   'paid', 'CAD', 2000, 100, 60, 2100, now(), 1, current_date);
+   'paid', 'CAD', 2000, 100, 2100, now(), 1, current_date);
 
 insert into public.order_tax_lines (order_id, tax_code, tax_name, rate_bps, base_cents, tax_cents) values
   ('50000000-0000-4000-8000-0000000000a1', 'GST', 'GST', 500, 1000, 50),
