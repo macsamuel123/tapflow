@@ -1,17 +1,35 @@
 "use client";
 
 import { useState } from "react";
+import { AllergenPicker } from "@/components/menu-builder/AllergenPicker";
 import { CategoryField } from "@/components/menu-builder/CategoryField";
 import { CsvImporter } from "@/components/menu-builder/CsvImporter";
 import { Button, Card, SelectField, TextField } from "@/components/ui";
+import { allergenChoiceError } from "@/lib/menu/allergens";
 import { parseDollars } from "@/lib/menu/price";
 import { categoryNameError, itemNameError, menuKey, priceError } from "@/lib/menu/rules";
-import type { DuplicateMode, ImportResult, MenuImportRow, TaxCategory } from "@/services/types";
+import type { AllergenId, DuplicateMode, ImportResult, MenuImportRow, TaxCategory } from "@/services/types";
 
-export type QuickItem = { id: string; name: string; price: string; category: string; taxCategory: TaxCategory };
+export type QuickItem = {
+  id: string;
+  name: string;
+  price: string;
+  category: string;
+  taxCategory: TaxCategory;
+  allergens: AllergenId[];
+  noAllergens: boolean;
+};
 
 export function blankQuickItem(category = ""): QuickItem {
-  return { id: crypto.randomUUID(), name: "", price: "", category, taxCategory: "Food" };
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    price: "",
+    category,
+    taxCategory: "Food",
+    allergens: [],
+    noAllergens: false,
+  };
 }
 
 export function isBlankQuickItem(item: QuickItem): boolean {
@@ -23,6 +41,7 @@ function quickErrors(item: QuickItem) {
     name: itemNameError(item.name),
     price: priceError(item.price),
     category: categoryNameError(item.category),
+    allergens: allergenChoiceError(item.allergens, item.noAllergens),
   };
 }
 
@@ -40,7 +59,7 @@ export function quickRows(items: QuickItem[]): MenuImportRow[] {
       taxCategory: item.taxCategory,
       description: null,
       soldOut: null,
-      allergens: null,
+      allergens: item.allergens,
     }));
 }
 
@@ -88,7 +107,7 @@ export function StepFirstItems({
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-black text-ink">Add your first items</h1>
-        <p className="mt-1 text-gray-600">Optional. You can add more later, with photos, options and allergens.</p>
+        <p className="mt-1 text-gray-600">Optional. You can add more later, with photos and options.</p>
       </div>
 
       {quickItems.map((item, i) => {
@@ -110,6 +129,13 @@ export function StepFirstItems({
               value={item.category}
               error={errors?.category}
               onChange={(e) => setItem(item.id, { category: e.target.value })}
+            />
+            <AllergenPicker
+              legend={`Item ${i + 1} allergens`}
+              allergens={item.allergens}
+              noAllergens={item.noAllergens}
+              error={errors?.allergens}
+              onChange={(choice) => setItem(item.id, choice)}
             />
             {quickItems.length > 1 ? (
               <Button variant="ghost" onClick={() => onQuickItems(quickItems.filter((q) => q.id !== item.id))}>Remove item {i + 1}</Button>

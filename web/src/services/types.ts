@@ -76,6 +76,7 @@ export type AllergenId =
   | "egg"
   | "fish"
   | "crustacean"
+  | "shellfish"
   | "tree_nut"
   | "peanut"
   | "gluten"
@@ -102,6 +103,7 @@ export type MenuItem = {
   priceCents: number;
   taxCategory: TaxCategory;
   inStock: boolean;
+  /** Empty means the owner declared none. Every form and import requires a choice. */
   allergens: AllergenId[];
   optionGroups: OptionGroup[];
   photoUrl: string | null;
@@ -120,7 +122,8 @@ export type MenuImportRow = {
   taxCategory: TaxCategory;
   description: string | null;
   soldOut: boolean | null;
-  allergens: AllergenId[] | null;
+  /** Always declared: an empty list means the owner chose "no listed allergens". */
+  allergens: AllergenId[];
 };
 
 export type DuplicateMode = "skip" | "update";

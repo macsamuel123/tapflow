@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { pngFile } from "./menu-helpers";
 
-const CSV = "category,name,price,tax_type\nChecks,From CSV,4.00,food\n";
+const CSV = "category,name,price,tax_type,allergens\nChecks,From CSV,4.00,food,none\n";
 import { fillAccount, fillVenue, openPage, skipFirstItems } from "./helpers";
 
 test("@saas demo mode makes no API or third-party requests", async ({ page, baseURL }) => {
@@ -40,6 +40,7 @@ test("@saas demo mode makes no API or third-party requests", async ({ page, base
   await editor.getByLabel("Item name").fill("Network check");
   await editor.getByLabel("Price").fill("5.00");
   await editor.getByLabel("Category").fill("Checks");
+  await editor.getByLabel("No listed allergens").check();
   await editor.getByLabel("Upload photo").setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: pngFile(40, 40) });
   await expect(editor.getByAltText("Item preview")).toBeVisible();
   await editor.getByRole("button", { name: "Save item" }).click();

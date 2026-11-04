@@ -19,7 +19,7 @@ import { emailError, passwordError } from "@/lib/validation";
 import { getServices } from "@/services";
 import { ServiceError, type CountryCode, type IndustryId, type MenuImportRow } from "@/services/types";
 
-const DRAFT_KEY = "tapflow:signup-draft:v2";
+const DRAFT_KEY = "tapflow:signup-draft:v3";
 const STEP_COUNT = 5;
 
 // Passwords are left out so they never reach browser storage.

@@ -39,7 +39,7 @@ export function applyImport(
       existing.taxCategory = row.taxCategory;
       existing.description = row.description ?? existing.description;
       existing.inStock = row.soldOut === null ? existing.inStock : !row.soldOut;
-      existing.allergens = row.allergens ?? existing.allergens;
+      existing.allergens = row.allergens;
       result.updated += 1;
       continue;
     }
@@ -50,7 +50,7 @@ export function applyImport(
       priceCents: row.priceCents,
       taxCategory: row.taxCategory,
       inStock: !(row.soldOut ?? false),
-      allergens: row.allergens ?? [],
+      allergens: row.allergens,
       optionGroups: [],
       photoUrl: null,
     };

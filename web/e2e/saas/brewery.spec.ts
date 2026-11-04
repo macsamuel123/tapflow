@@ -4,6 +4,7 @@ import { expectNoSideScroll, fillAccount, fillVenue, openPage, skipFirstItems } 
 
 test("@saas brewery path: landing to every dashboard page", async ({ page }) => {
   await page.goto("/");
+  await expect(page).toHaveTitle("TapFlow — Scan. Order. Serve.");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByText("Scan. Order. Serve.").first()).toBeVisible();
   await expectNoSideScroll(page);

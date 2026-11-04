@@ -143,6 +143,7 @@ function foodMenu(): MenuCategory[] {
       name: "Mains",
       items: [
         item("Birria tacos", "Three tacos with consomme for dipping.", 1600, "Food", {
+          allergens: ["gluten"],
           optionGroups: [pickOne("Spice level", [["Mild", 0], ["Hot", 0]])],
         }),
         item("Crispy fish tacos", "Lime slaw and chipotle crema.", 1500, "Food", {

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, buttonClass, FormError, SelectField, TextField, YesNo } from "@/components/ui";
-import { ALLERGENS } from "@/lib/menu/allergens";
+import { allergenChoiceError } from "@/lib/menu/allergens";
 import { preparePhoto, photoFileError } from "@/lib/menu/photo";
 import { centsToInput, parseDollars } from "@/lib/menu/price";
 import {
@@ -16,6 +16,7 @@ import {
   type OptionGroupForm,
 } from "@/lib/menu/rules";
 import { getServices, ServiceError, type AllergenId, type MenuItem, type TaxCategory } from "@/services";
+import { AllergenPicker } from "./AllergenPicker";
 import { CategoryField } from "./CategoryField";
 import { OptionGroupsEditor } from "./OptionGroupsEditor";
 import { ConfirmDialog, Sheet } from "./Sheet";
@@ -51,6 +52,7 @@ export function ItemEditor({
   const [taxCategory, setTaxCategory] = useState<TaxCategory>(item?.taxCategory ?? "Food");
   const [soldOut, setSoldOut] = useState(item ? !item.inStock : false);
   const [allergens, setAllergens] = useState<AllergenId[]>(item?.allergens ?? []);
+  const [noAllergens, setNoAllergens] = useState(item ? item.allergens.length === 0 : false);
   const [groups, setGroups] = useState(() => toGroupForm(item));
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [photoRemoved, setPhotoRemoved] = useState(false);
@@ -71,6 +73,7 @@ export function ItemEditor({
     description: descriptionError(description),
     price: priceError(price),
     category: categoryNameError(category),
+    allergens: allergenChoiceError(allergens, noAllergens),
   };
   const valid = !Object.values(errors).some(Boolean) && !groups.some((g) => optionGroupError(g));
 
@@ -188,26 +191,15 @@ export function ItemEditor({
             <FormError message={photoError} />
           </section>
 
-          <fieldset>
-            <legend className="font-semibold text-ink">Allergens</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {ALLERGENS.map((allergen) => (
-                <label key={allergen.id} className="flex min-h-11 items-center gap-2 text-sm text-ink">
-                  <input
-                    type="checkbox"
-                    className="size-5 accent-brand-700"
-                    checked={allergens.includes(allergen.id)}
-                    onChange={(e) =>
-                      setAllergens((current) =>
-                        e.target.checked ? [...current, allergen.id] : current.filter((a) => a !== allergen.id),
-                      )
-                    }
-                  />
-                  {allergen.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+          <AllergenPicker
+            allergens={allergens}
+            noAllergens={noAllergens}
+            error={attempted ? errors.allergens : undefined}
+            onChange={(next) => {
+              setAllergens(next.allergens);
+              setNoAllergens(next.noAllergens);
+            }}
+          />
 
           <OptionGroupsEditor groups={groups} showErrors={attempted} onChange={setGroups} />
           {attempted && !valid ? <FormError message="Fix the highlighted items, then save." /> : null}

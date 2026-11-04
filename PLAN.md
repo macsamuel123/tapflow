@@ -164,7 +164,7 @@ Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `
 
 **Owner onboarding.** A first sign-in with no membership shows a "Create venue" form. The seed creates a demo owner and fulfillment user.
 
-**CSV import.** Columns: `category,name,description,price,tax_type,sold_out,allergens`. `price` is in dollars and is converted to integer cents, `tax_type` is `food` or `alcohol`, and `allergens` is pipe-separated. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
+**CSV import.** Columns: `category,name,description,price,tax_type,sold_out,allergens`. `price` is in dollars and is converted to integer cents, `tax_type` is `food` or `alcohol`, and `allergens` is required and pipe-separated, with `none` for no listed allergens. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
 
 ## 5. Deviations and gaps vs the BRD
 
@@ -332,5 +332,6 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 **To carry into the real menu (M4):**
 - Option groups already follow the database: maximum picks 1 to 20, required means minimum of at least 1, optional means a minimum of 0, and option prices can't be negative.
 - The price limit of 10,000.00 and the 300-character description limit are UI rules. The API needs to enforce them too, because the database doesn't.
-- Allergens are on the item form, the item card and the CSV. The mock stores the database codes (`menu_items.allergens`). The checklist omits `shellfish` (molluscs), which the database has, so decide whether to add it before going live.
+- Allergens are on the item form, the item card and the CSV, and the mock stores the database codes (`menu_items.allergens`). Owners must declare them: tick allergens or "No listed allergens", and use `none` in the CSV. A blank or missing value is rejected.
+- `menu_items.allergens` defaults to `{}`, so the database can't tell "none" from "not answered". The real API must require the choice, and M4 should add a way to record it, such as a `allergens_declared` column.
 - `ingredients` and `dietary_tags` are still deferred.

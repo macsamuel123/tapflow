@@ -8,12 +8,12 @@ const HEADER = "category,name,description,price,tax_type,sold_out,allergens";
 const FIVE_PLUS_TWO = [
   HEADER,
   'Mains,Fish tacos,"Lime slaw, chipotle crema",15.50,food,no,fish|wheat',
-  "Mains,Veggie bowl,,14,food,,",
+  "Mains,Veggie bowl,,14,food,,none",
   "Drinks,Red wine,By the glass,12.5,alcohol,yes,sulphites",
-  "Drinks,Lemonade,,0,food,no,",
-  "Sides,Fries,,6.00,FOOD,NO,",
-  ",No category or name,,5.00,food,no,",
-  "Mains,Bad row,,12.345,wine,maybe,",
+  "Drinks,Lemonade,,0,food,no,NONE",
+  "Sides,Fries,,6.00,FOOD,NO,none",
+  ",No category or name,,5.00,food,no,none",
+  "Mains,Bad row,,12.345,wine,maybe,none",
 ].join("\n");
 
 test.beforeEach(async ({ page }) => {
@@ -57,12 +57,12 @@ test("@saas CSV: 5 valid + 2 invalid preview correctly and import 5", async ({ p
 test("@saas CSV allergens: pipe-separated values become tags", async ({ page }) => {
   const importer = await openImporter(page);
   await importer.getByLabel("Choose CSV file").setInputFiles(
-    csvFile(`${HEADER}\nMains,Pad thai,,16.00,food,no,peanuts|Tree Nuts|EGGS|crustacean shellfish|soy\n`),
+    csvFile(`${HEADER}\nMains,Pad thai,,16.00,food,no,peanuts|Tree Nuts|EGGS|crustacean shellfish|molluscs|soy\n`),
   );
   await importer.getByRole("button", { name: "Import 1 item" }).click();
   await importer.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("list", { name: "Allergens in Pad thai" }).getByRole("listitem")).toHaveText([
-    "Peanuts", "Tree nuts", "Eggs", "Crustacean shellfish", "Soy",
+    "Peanuts", "Tree nuts", "Eggs", "Crustacean shellfish", "Molluscs", "Soy",
   ]);
 });
 
@@ -75,16 +75,30 @@ test("@saas CSV allergens: an unknown value makes the row invalid with the reaso
   await expect(importer.getByRole("button", { name: "Import 1 item" })).toBeVisible();
 });
 
-test("@saas CSV: the allergens column is optional", async ({ page }) => {
+test("@saas CSV allergens: blank is invalid, none is accepted, and none can't mix", async ({ page }) => {
+  const importer = await openImporter(page);
+  await importer.getByLabel("Choose CSV file").setInputFiles(
+    csvFile(`${HEADER}\nMains,Blank,,1.00,food,no,\nMains,Mixed,,1.00,food,no,milk|none\nMains,Plain,,1.00,food,no,none\n`),
+  );
+  const invalid = importer.getByTestId("csv-invalid");
+  await expect(invalid.nth(0)).toContainText("allergens required — use none if none");
+  await expect(invalid.nth(1)).toContainText("none can't be combined with allergens");
+  await importer.getByRole("button", { name: "Import 1 item" }).click();
+  await expect(importer.getByRole("status")).toHaveText("Imported 1 item, 2 skipped");
+  await importer.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("list", { name: "Allergens in Plain" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
+});
+
+test("@saas CSV allergens: a file without the column is rejected", async ({ page }) => {
   const importer = await openImporter(page);
   await importer.getByLabel("Choose CSV file").setInputFiles(
     csvFile("category,name,price,tax_type\nMains,Plain,1.00,food\n"),
   );
-  await expect(importer.getByTestId("csv-valid")).toHaveCount(1);
+  await expect(importer.getByText("This file is missing a column: allergens.")).toBeVisible();
 });
 
 test("@saas CSV duplicates: skip keeps the item, update changes it and keeps options", async ({ page }) => {
-  const dupes = `${HEADER}\non tap,  HARBOUR   lager ,New words,9.99,alcohol,,\nBites,New bite,,3.00,food,no,\n`;
+  const dupes = `${HEADER}\non tap,  HARBOUR   lager ,New words,9.99,alcohol,,milk\nBites,New bite,,3.00,food,no,none\n`;
 
   let importer = await openImporter(page);
   await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(dupes));
@@ -109,13 +123,13 @@ test("@saas CSV duplicates: skip keeps the item, update changes it and keeps opt
   await expect(onTap.getByText("$9.99")).toBeVisible();
   await expect(onTap.getByText("New words")).toBeVisible();
   await expect(onTap.getByText("Options: Size (required)")).toBeVisible();
-  await expect(page.getByRole("list", { name: "Allergens in Harbour Lager" }).getByRole("listitem")).toHaveText(["Wheat/gluten"]);
+  await expect(page.getByRole("list", { name: "Allergens in Harbour Lager" }).getByRole("listitem")).toHaveText(["Milk"]);
 });
 
 test("@saas CSV: the same item twice in one file is flagged", async ({ page }) => {
   const importer = await openImporter(page);
   await importer.getByLabel("Choose CSV file").setInputFiles(
-    csvFile(`${HEADER}\nMains,Burger,,10.00,food,,\nmains,burger,,12.00,food,,\n`),
+    csvFile(`${HEADER}\nMains,Burger,,10.00,food,,none\nmains,burger,,12.00,food,,none\n`),
   );
   await expect(importer.getByTestId("csv-invalid")).toContainText("Same category and name as an earlier row");
 });
@@ -133,16 +147,16 @@ test("@saas CSV: non-CSV and oversized files are rejected", async ({ page }) => 
   await input.setInputFiles(csvFile("x".repeat(1_000_001)));
   await expect(importer.getByText("That file is over the 1 MB limit.")).toBeVisible();
 
-  const rows = Array.from({ length: 1001 }, (_, i) => `Mains,Item ${i},,1.00,food,,`).join("\n");
+  const rows = Array.from({ length: 1001 }, (_, i) => `Mains,Item ${i},,1.00,food,,none`).join("\n");
   await input.setInputFiles(csvFile(`${HEADER}\n${rows}\n`));
   await expect(importer.getByText("This file has 1001 rows. The limit is 1000.")).toBeVisible();
 
-  await input.setInputFiles(csvFile("category,name,tax_type\nMains,Item,food\n"));
+  await input.setInputFiles(csvFile("category,name,tax_type,allergens\nMains,Item,food,none\n"));
   await expect(importer.getByText("This file is missing a column: price.")).toBeVisible();
 });
 
 test("@saas CSV: 1,000 rows import, and the page stays usable", async ({ page }) => {
-  const rows = Array.from({ length: 1000 }, (_, i) => `Cat ${i % 10},Item ${i},,1.00,food,,`).join("\n");
+  const rows = Array.from({ length: 1000 }, (_, i) => `Cat ${i % 10},Item ${i},,1.00,food,,none`).join("\n");
   const importer = await openImporter(page);
   await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(`${HEADER}\n${rows}\n`));
   await expect(importer.getByText("Showing the first 100 of 1000 rows.")).toBeVisible();

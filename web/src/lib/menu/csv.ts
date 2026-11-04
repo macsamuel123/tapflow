@@ -8,14 +8,14 @@ export const MAX_CSV_ROWS = 1_000;
 export const TEMPLATE_NAME = "tapflow-menu-template.csv";
 
 const COLUMNS = ["category", "name", "description", "price", "tax_type", "sold_out", "allergens"];
-const REQUIRED_COLUMNS = ["category", "name", "price", "tax_type"];
+const REQUIRED_COLUMNS = ["category", "name", "price", "tax_type", "allergens"];
 const NOT_CSV = "That doesn't look like a CSV file. Choose a .csv file.";
 
 export const TEMPLATE_CSV = [
   COLUMNS.join(","),
   'Mains,Smash burger,"Double patty, pickles, house sauce",18.00,food,no,milk|wheat',
   "Drinks,Harbour Lager,Crisp and clean,8.00,alcohol,no,wheat",
-  "Desserts,Lemon tart,,7.50,food,yes,eggs|milk|wheat",
+  "Drinks,Sparkling lemonade,,5.00,food,yes,none",
 ].join("\r\n") + "\r\n";
 
 export type PreviewRow = {
@@ -41,13 +41,17 @@ function parseSoldOut(value: string): boolean | null | "bad" {
   return text === "no" ? false : "bad";
 }
 
-function parseAllergens(value: string): { ids: AllergenId[] | null; unknown: string[] } {
-  if (!value.trim()) return { ids: null, unknown: [] };
+function parseAllergens(value: string): { ids: AllergenId[]; problem: string | null } {
   const parts = value.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return { ids: [], problem: "allergens required — use none if none" };
+  if (parts.some((p) => p.toLowerCase() === "none")) {
+    return { ids: [], problem: parts.length > 1 ? "none can't be combined with allergens" : null };
+  }
   const ids = parts.map(allergenFromCsv);
+  const unknown = parts.filter((_, i) => ids[i] === null);
   return {
     ids: [...new Set(ids.filter((id): id is AllergenId => id !== null))],
-    unknown: parts.filter((_, i) => ids[i] === null),
+    problem: unknown.length ? `Unknown allergen: ${unknown.join(", ")}` : null,
   };
 }
 
@@ -67,7 +71,7 @@ function checkRow(raw: Record<string, string>, extraColumns: boolean) {
   const soldOut = parseSoldOut(get("sold_out"));
   if (soldOut === "bad") reasons.push("sold_out must be yes or no");
   const allergens = parseAllergens(get("allergens"));
-  if (allergens.unknown.length) reasons.push(`Unknown allergen: ${allergens.unknown.join(", ")}`);
+  if (allergens.problem) reasons.push(allergens.problem);
 
   if (reasons.length || priceCents === null || !taxCategory || soldOut === "bad") {
     return { row: null, reason: reasons.join("; ") };

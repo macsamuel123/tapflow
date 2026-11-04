@@ -6,7 +6,7 @@ import { CsvImporter } from "@/components/menu-builder/CsvImporter";
 import { ItemEditor } from "@/components/menu-builder/ItemEditor";
 import { ConfirmDialog, Sheet } from "@/components/menu-builder/Sheet";
 import { Button, Card, FormError, Pill, TextField } from "@/components/ui";
-import { allergenLabel } from "@/lib/menu/allergens";
+import { allergenLabel, NO_ALLERGENS_LABEL } from "@/lib/menu/allergens";
 import { categoryNameError, menuKey } from "@/lib/menu/rules";
 import { formatCents } from "@/lib/money";
 import { useData } from "@/lib/use-data";
@@ -51,13 +51,12 @@ function ItemCard({
             Options: {item.optionGroups.map((g) => `${g.name}${g.required ? " (required)" : ""}`).join(", ")}
           </p>
         ) : null}
-        {item.allergens.length ? (
-          <ul aria-label={`Allergens in ${item.name}`} className="mt-1 flex flex-wrap gap-1">
-            {item.allergens.map((allergen) => (
-              <li key={allergen}><Pill tone="amber">{allergenLabel(allergen)}</Pill></li>
-            ))}
-          </ul>
-        ) : null}
+        <ul aria-label={`Allergens in ${item.name}`} className="mt-1 flex flex-wrap gap-1">
+          {item.allergens.map((allergen) => (
+            <li key={allergen}><Pill tone="amber">{allergenLabel(allergen)}</Pill></li>
+          ))}
+          {item.allergens.length === 0 ? <li><Pill>{NO_ALLERGENS_LABEL}</Pill></li> : null}
+        </ul>
       </div>
       <div className="flex shrink-0 flex-col items-center gap-1">
         <button

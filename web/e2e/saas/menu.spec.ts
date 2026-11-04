@@ -18,10 +18,12 @@ test("@saas sign-up step 5: two items appear on the Menu page, and only those", 
   await page.getByLabel("Item 1 price").fill("8.00");
   await page.getByLabel("Item 1 tax type").selectOption("Alcohol");
   await page.getByLabel("Item 1 category").fill("On tap");
+  await page.getByRole("group", { name: "Item 1 allergens" }).getByLabel("Wheat/gluten").check();
   await page.getByRole("button", { name: "Add another item" }).click();
   await page.getByLabel("Item 2 name").fill("Soft pretzel");
   await page.getByLabel("Item 2 price").fill("9.50");
   await page.getByLabel("Item 2 category").fill("Bites");
+  await page.getByRole("group", { name: "Item 2 allergens" }).getByLabel("No listed allergens").check();
   await page.getByRole("button", { name: "Create my QR codes" }).click();
 
   await page.getByRole("link", { name: "Continue to dashboard" }).click();
@@ -30,7 +32,25 @@ test("@saas sign-up step 5: two items appear on the Menu page, and only those", 
   await expect(page.getByRole("button", { name: "Edit Harbour Lager" })).toBeVisible();
   await expect(category(page, "Bites").getByText("$9.50")).toBeVisible();
   await expect(category(page, "On tap").getByText("Alcohol (GST + PST)")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Allergens in Harbour Lager" }).getByRole("listitem")).toHaveText(["Wheat/gluten"]);
+  await expect(page.getByRole("list", { name: "Allergens in Soft pretzel" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
   await expect(page.getByRole("button", { name: "Clear sample menu" })).toHaveCount(0);
+});
+
+test("@saas sign-up step 5 requires an allergen choice", async ({ page }) => {
+  await reachSetupStep(page, "breweries", "Harbour Taproom");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Item 1 name").fill("Lager");
+  await page.getByLabel("Item 1 price").fill("8.00");
+  await page.getByLabel("Item 1 category").fill("On tap");
+  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  const group = page.getByRole("group", { name: "Item 1 allergens" });
+  await expect(group.getByRole("alert")).toHaveText("Tick the allergens, or tick No listed allergens.");
+  await expect(page.getByRole("heading", { name: "Add your first items" })).toBeVisible();
+
+  await group.getByLabel("Molluscs").check();
+  await page.getByRole("button", { name: "Create my QR codes" }).click();
+  await expect(page.getByRole("heading", { name: "Your QR codes are ready" })).toBeVisible();
 });
 
 test("@saas sign-up step 5 blocks a half-filled row, and Skip ignores it", async ({ page }) => {
@@ -210,6 +230,7 @@ test("@saas option groups: invalid settings are rejected", async ({ page }) => {
   const editor = page.getByRole("dialog");
   await editor.getByLabel("Item name").fill("Test item");
   await editor.getByLabel("Price").fill("1.00");
+  await editor.getByLabel("No listed allergens").check();
   await editor.getByRole("button", { name: "Add option group" }).click();
   const group = editor.getByRole("group", { name: "Option group 1" });
   await group.getByLabel("Group name").fill("Size");
@@ -277,6 +298,38 @@ test("@saas sold-out edits are per persona and survive a reload", async ({ page 
   await expect(page.getByRole("button", { name: "Edit Cedar IPA" })).toHaveCount(0);
 });
 
+test("@saas item form: can't save without an allergen choice, and the choices exclude each other", async ({ page }) => {
+  await logIn(page);
+  await openPage(page, "Menu", "Menu");
+  await page.getByRole("button", { name: "Add item" }).click();
+  const editor = page.getByRole("dialog");
+  await editor.getByLabel("Item name").fill("Declared item");
+  await editor.getByLabel("Price").fill("3.00");
+  await editor.getByLabel("Category").fill("Bites");
+  const none = editor.getByLabel("No listed allergens");
+  const molluscs = editor.getByLabel("Molluscs");
+
+  await editor.getByRole("button", { name: "Save item" }).click();
+  await expect(editor.getByText("Tick the allergens, or tick No listed allergens.")).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  await molluscs.check();
+  await none.check();
+  await expect(molluscs).not.toBeChecked();
+  await molluscs.check();
+  await expect(none).not.toBeChecked();
+  await molluscs.uncheck();
+  await editor.getByRole("button", { name: "Save item" }).click();
+  await expect(editor.getByText("Tick the allergens, or tick No listed allergens.")).toBeVisible();
+
+  await none.check();
+  await editor.getByRole("button", { name: "Save item" }).click();
+  await expect(page.getByRole("list", { name: "Allergens in Declared item" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
+
+  await page.getByRole("button", { name: "Edit Declared item" }).click();
+  await expect(page.getByRole("dialog").getByLabel("No listed allergens")).toBeChecked();
+});
+
 test("@saas allergen tags show on sample items", async ({ page }) => {
   await logIn(page);
   await openPage(page, "Menu", "Menu");
@@ -323,5 +376,6 @@ test("@saas the template itself imports cleanly", async ({ page }) => {
   await importer.getByRole("button", { name: "Import 3 items" }).click();
   await expect(importer.getByRole("status")).toHaveText("Imported 3 items, 0 skipped");
   await importer.getByRole("button", { name: "Done" }).click();
-  await expect(category(page, "Desserts").getByRole("switch", { name: "Lemon tart sold out" })).toHaveAttribute("aria-checked", "true");
+  await expect(category(page, "Drinks").getByRole("switch", { name: "Sparkling lemonade sold out" })).toHaveAttribute("aria-checked", "true");
+  await expect(category(page, "Drinks").getByRole("list", { name: "Allergens in Sparkling lemonade" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
 });

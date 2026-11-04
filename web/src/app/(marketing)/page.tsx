@@ -4,7 +4,7 @@ import { LinkButton } from "@/components/ui";
 import { INDUSTRIES } from "@/lib/industries";
 
 export const metadata: Metadata = {
-  title: "TapFlow: Scan. Order. Serve.",
+  title: { absolute: "TapFlow — Scan. Order. Serve." },
   description: "Guests scan a QR code, order and pay. You bring it to their spot or call them to collect it.",
 };
 
