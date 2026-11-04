@@ -32,7 +32,10 @@ test-api: ## pytest (integration tests skip if Supabase is not running)
 	cd api && uv run pytest
 
 test-db: ## pgTAP tests (RLS, grants, status guard) — needs `supabase start`
-	$(SUPABASE) test db
+	@status=0; out=$$($(SUPABASE) test db 2>&1) || status=$$?; printf '%s\n' "$$out"; \
+	if [ "$$status" -ne 0 ] || ! grep -qx 'Result: PASS' <<<"$$out"; then \
+		echo "test-db: pgTAP did not report 'Result: PASS' (exit $$status)" >&2; exit 1; \
+	fi
 
 lint: lint-api lint-web ## ruff + mypy + eslint + tsc
 
