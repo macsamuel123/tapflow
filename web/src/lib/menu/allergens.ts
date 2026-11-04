@@ -15,6 +15,7 @@ export const ALLERGENS: readonly { id: AllergenId; label: string; csv: readonly 
   { id: "sulphites", label: "Sulphites", csv: ["sulphites", "sulfites"] },
 ];
 
+export const SAMPLE_ALLERGENS_NOTE = "Sample data, not a real allergen claim";
 export const NO_ALLERGENS_LABEL = "No listed allergens";
 export const ALLERGEN_CHOICE_MESSAGE = `Tick the allergens, or tick ${NO_ALLERGENS_LABEL}.`;
 

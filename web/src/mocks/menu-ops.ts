@@ -40,6 +40,7 @@ export function applyImport(
       existing.description = row.description ?? existing.description;
       existing.inStock = row.soldOut === null ? existing.inStock : !row.soldOut;
       existing.allergens = row.allergens;
+      existing.sampleAllergens = false;
       result.updated += 1;
       continue;
     }
@@ -51,6 +52,7 @@ export function applyImport(
       taxCategory: row.taxCategory,
       inStock: !(row.soldOut ?? false),
       allergens: row.allergens,
+      sampleAllergens: false,
       optionGroups: [],
       photoUrl: null,
     };

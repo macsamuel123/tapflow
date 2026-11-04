@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, buttonClass, FormError, SelectField, TextField, YesNo } from "@/components/ui";
-import { allergenChoiceError } from "@/lib/menu/allergens";
+import { allergenChoiceError, SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
 import { preparePhoto, photoFileError } from "@/lib/menu/photo";
 import { centsToInput, parseDollars } from "@/lib/menu/price";
 import {
@@ -191,6 +191,11 @@ export function ItemEditor({
             <FormError message={photoError} />
           </section>
 
+          {item?.sampleAllergens ? (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">
+              {SAMPLE_ALLERGENS_NOTE}. Change the ticks below to set your own.
+            </p>
+          ) : null}
           <AllergenPicker
             allergens={allergens}
             noAllergens={noAllergens}

@@ -349,7 +349,7 @@ export const mockServices: Services = {
       updateActive((workspace) => {
         requireUniqueItem(workspace, input.category, input.name, null);
         const { category, ...fields } = input;
-        ensureCategory(workspace.menu, category).items.push({ ...fields, id, photoUrl: null });
+        ensureCategory(workspace.menu, category).items.push({ ...fields, id, photoUrl: null, sampleAllergens: false });
       });
       return id;
     },
@@ -360,6 +360,11 @@ export const mockServices: Services = {
         const source = workspace.menu.find((c) => c.items.some((i) => i.id === id));
         const item = source?.items.find((i) => i.id === id);
         if (!source || !item) throw new ServiceError("That item no longer exists.");
+        const sameAllergens =
+          item.allergens.length === fields.allergens.length &&
+          item.allergens.every((a) => fields.allergens.includes(a));
+        // Saving another field isn't a declaration: the sample allergens stay marked as sample.
+        if (!sameAllergens) item.sampleAllergens = false;
         Object.assign(item, fields);
         const target = ensureCategory(workspace.menu, category);
         if (target !== source) {

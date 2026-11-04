@@ -105,6 +105,8 @@ export type MenuItem = {
   inStock: boolean;
   /** Empty means the owner declared none. Every form and import requires a choice. */
   allergens: AllergenId[];
+  /** Allergens were written by us, not declared by the owner. Cleared once the owner changes them. */
+  sampleAllergens: boolean;
   optionGroups: OptionGroup[];
   photoUrl: string | null;
 };
@@ -112,7 +114,7 @@ export type MenuItem = {
 export type MenuCategory = { id: string; name: string; items: MenuItem[] };
 
 /** What a form saves. `category` is a name: a new name creates the category. */
-export type MenuItemInput = Omit<MenuItem, "id" | "photoUrl"> & { category: string };
+export type MenuItemInput = Omit<MenuItem, "id" | "photoUrl" | "sampleAllergens"> & { category: string };
 
 /** One imported item. Null keeps the current value when a duplicate is updated. */
 export type MenuImportRow = {

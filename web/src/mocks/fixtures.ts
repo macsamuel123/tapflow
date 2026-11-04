@@ -74,6 +74,7 @@ function item(
     taxCategory,
     inStock: true,
     allergens: [],
+    sampleAllergens: true,
     optionGroups: [],
     photoUrl: null,
     ...extras,

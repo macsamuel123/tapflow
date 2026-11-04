@@ -6,7 +6,7 @@ import { CsvImporter } from "@/components/menu-builder/CsvImporter";
 import { ItemEditor } from "@/components/menu-builder/ItemEditor";
 import { ConfirmDialog, Sheet } from "@/components/menu-builder/Sheet";
 import { Button, Card, FormError, Pill, TextField } from "@/components/ui";
-import { allergenLabel, NO_ALLERGENS_LABEL } from "@/lib/menu/allergens";
+import { allergenLabel, NO_ALLERGENS_LABEL, SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
 import { categoryNameError, menuKey } from "@/lib/menu/rules";
 import { formatCents } from "@/lib/money";
 import { useData } from "@/lib/use-data";
@@ -57,6 +57,7 @@ function ItemCard({
           ))}
           {item.allergens.length === 0 ? <li><Pill>{NO_ALLERGENS_LABEL}</Pill></li> : null}
         </ul>
+        {item.sampleAllergens ? <p className="mt-1 text-xs font-medium text-gray-600">{SAMPLE_ALLERGENS_NOTE}</p> : null}
       </div>
       <div className="flex shrink-0 flex-col items-center gap-1">
         <button

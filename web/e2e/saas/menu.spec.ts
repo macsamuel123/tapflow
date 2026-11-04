@@ -35,6 +35,7 @@ test("@saas sign-up step 5: two items appear on the Menu page, and only those", 
   await expect(page.getByRole("list", { name: "Allergens in Harbour Lager" }).getByRole("listitem")).toHaveText(["Wheat/gluten"]);
   await expect(page.getByRole("list", { name: "Allergens in Soft pretzel" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
   await expect(page.getByRole("button", { name: "Clear sample menu" })).toHaveCount(0);
+  await expect(page.getByText("Sample data, not a real allergen claim")).toHaveCount(0);
 });
 
 test("@saas sign-up step 5 requires an allergen choice", async ({ page }) => {
@@ -328,6 +329,54 @@ test("@saas item form: can't save without an allergen choice, and the choices ex
 
   await page.getByRole("button", { name: "Edit Declared item" }).click();
   await expect(page.getByRole("dialog").getByLabel("No listed allergens")).toBeChecked();
+});
+
+test("@saas sample allergens are marked as sample data until the owner changes them", async ({ page }) => {
+  const NOTE = "Sample data, not a real allergen claim";
+  await logIn(page);
+  await openPage(page, "Menu", "Menu");
+  const notes = page.getByText(NOTE);
+  const total = await page.getByRole("switch").count();
+  await expect(notes).toHaveCount(total); // every sample item, including ones with no listed allergens
+
+  const burger = category(page, "Bites").getByRole("listitem").filter({ hasText: "Smash burger" }).first();
+  await expect(burger.getByText(NOTE)).toBeVisible();
+
+  // Saving another field doesn't turn sample data into a declaration.
+  await page.getByRole("button", { name: "Edit Smash burger" }).click();
+  await expect(page.getByRole("dialog").getByText(NOTE)).toBeVisible();
+  await page.getByRole("dialog").getByLabel("Price", { exact: true }).fill("19.00");
+  await page.getByRole("button", { name: "Save item" }).click();
+  await expect(burger.getByText("$19.00")).toBeVisible();
+  await expect(burger.getByText(NOTE)).toBeVisible();
+
+  // Changing the allergens does.
+  await page.getByRole("button", { name: "Edit Smash burger" }).click();
+  await page.getByRole("dialog").getByLabel("Mustard").check();
+  await page.getByRole("button", { name: "Save item" }).click();
+  await expect(page.getByRole("list", { name: "Allergens in Smash burger" }).getByText("Mustard")).toBeVisible();
+  await expect(burger.getByText(NOTE)).toHaveCount(0);
+
+  // So does a CSV update, and items the owner adds never carry the note.
+  await page.getByRole("button", { name: "Upload CSV" }).click();
+  await page.getByLabel("Choose CSV file").setInputFiles({
+    name: "m.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("category,name,price,tax_type,allergens\nBites,Soft pretzel,9.00,food,wheat\nBites,My own,5.00,food,none\n"),
+  });
+  await page.getByLabel("Update them").check();
+  await page.getByRole("button", { name: "Import 2 items" }).click();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(notes).toHaveCount(total - 2);
+  await expect(category(page, "Bites").getByRole("listitem").filter({ hasText: "My own" }).first().getByText(NOTE)).toHaveCount(0);
+});
+
+test("@saas sign-up items carry no sample note, and a skipped sign-up's sample menu does", async ({ page }) => {
+  await reachSetupStep(page, "food-trucks", "Taco Window");
+  await skipFirstItems(page);
+  await page.getByRole("link", { name: "Continue to dashboard" }).click();
+  await openPage(page, "Menu", "Menu");
+  await expect(page.getByText("Sample data, not a real allergen claim").first()).toBeVisible();
 });
 
 test("@saas allergen tags show on sample items", async ({ page }) => {
