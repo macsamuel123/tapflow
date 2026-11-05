@@ -349,6 +349,8 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 - Demo venue menus and touchpoints are read-only. Sold-out is the exception: `demo.item_stock` is shared, so a toggle reaches guest phones live.
 - Orders and sold-out overrides are deleted after 24 hours by `pg_cron`. A daily Vercel cron calls `/demo/api/keepalive` so a free Supabase project doesn't pause from inactivity.
 
+**Cloud project.** `tapflow` (ref `olnuudhjahlyclhfqqvk`) is in **West US (Oregon)**, not Canada Central, and we're keeping it there. Guest data, currently demo first names and orders, is therefore stored in the US. The future privacy policy must say so, and this matters more once real venues and M3 data arrive.
+
 **Carries into M3:** the Supabase Cloud project, the Realtime and polling pattern, and server-side repricing. The `demo` schema itself doesn't carry over and can be dropped when the demo retires.
 
 **Known limits:** `anon` can read all demo orders, including first names, and login is mocked, so anyone can change a shared order's status. Testers on one wifi share a rate limit.
