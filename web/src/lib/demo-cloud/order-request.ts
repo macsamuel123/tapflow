@@ -5,7 +5,7 @@ import { cleanGuestName, MAX_GUEST_NAME } from "@/lib/guest";
 import { quote } from "@/lib/pricing";
 import { demoBrewery, demoFoodTruck, taxesFor } from "@/mocks/fixtures";
 import type { Workspace } from "@/mocks/store";
-import type { MenuItem, Touchpoint } from "@/services/types";
+import type { MenuItem, Touchpoint, Venue } from "@/services/types";
 import { MAX_ORDER_LINES } from "./config";
 
 const MAX_NOTES = 200;
@@ -26,11 +26,14 @@ export type PricedOrder = {
 
 export type Rejection = { status: number; error: string };
 
+/** What pricing needs, from the code menus or a tester's stored menu. */
+export type PricingVenue = Pick<Workspace, "menu" | "touchpoints" | "taxes"> & { venue: Pick<Venue, "slug"> };
+
 export function demoVenue(slug: unknown): Workspace | undefined {
   return VENUES.find((v) => v.venue.slug === slug);
 }
 
-export function demoItem(venue: Workspace, itemId: unknown): MenuItem | undefined {
+export function demoItem(venue: Pick<Workspace, "menu">, itemId: unknown): MenuItem | undefined {
   return venue.menu.flatMap((c) => c.items).find((i) => i.id === itemId);
 }
 
@@ -44,12 +47,16 @@ function stringList(value: unknown): string[] | null {
   return Array.isArray(value) && value.every((v) => typeof v === "string") ? (value as string[]) : null;
 }
 
-export function priceOrder(body: unknown, soldOut: ReadonlyMap<string, boolean>): PricedOrder | Rejection {
+export function priceOrder(
+  venue: PricingVenue | null,
+  body: unknown,
+  soldOut: ReadonlyMap<string, boolean>,
+): PricedOrder | Rejection {
   const request = record(body);
   if (!request) return { status: 400, error: "That request isn't valid." };
-  const venue = demoVenue(request.slug);
   const touchpoint = venue?.touchpoints.find((t) => t.id === request.touchpointId);
   if (!venue || !touchpoint) return { status: 404, error: "This menu isn't available." };
+  if (!touchpoint.active) return { status: 403, error: "This spot isn't taking orders right now." };
   if (request.token !== touchpoint.token) {
     return { status: 403, error: "Scan the QR on your touchpoint to check out." };
   }

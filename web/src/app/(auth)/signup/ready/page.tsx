@@ -16,6 +16,9 @@ export default function QrReadyPage() {
   const [data, setData] = useState<{ venue: Venue; touchpoints: Touchpoint[]; origin: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [localOnly, setLocalOnly] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -24,7 +27,14 @@ export default function QrReadyPage() {
         router.replace("/signup");
         return;
       }
-      const [venue, touchpoints] = await Promise.all([services.venues.current(), services.touchpoints.list()]);
+      const [venue, touchpoints, recovery, isLocal] = await Promise.all([
+        services.venues.current(),
+        services.touchpoints.list(),
+        services.venues.recoveryCode(),
+        services.venues.isLocalOnly(),
+      ]);
+      setCode(recovery);
+      setLocalOnly(isLocal);
       setData({ venue, touchpoints: touchpoints.filter((t) => t.active), origin: window.location.origin });
     })();
   }, [router]);
@@ -63,13 +73,37 @@ export default function QrReadyPage() {
         ))}
       </ul>
       {extra > 0 ? <p className="text-sm text-gray-600">Plus {extra} more on the sheet.</p> : null}
-      <p role="note" className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
+      {localOnly ? (
+        <p role="note" className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
+      ) : null}
+      {code ? (
+        <section className="space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+          <h2 className="font-bold text-ink">Save your venue recovery code</h2>
+          <p data-testid="recovery-code" className="font-mono text-lg font-bold break-all text-ink">{code}</p>
+          <p className="text-sm text-gray-700">
+            You&apos;ll need it to manage this venue on another device. It&apos;s shown only once, and it can&apos;t be
+            recovered if you lose it.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() => void navigator.clipboard?.writeText(code).then(() => setCopied(true))}
+          >
+            {copied ? "Copied" : "Copy code"}
+          </Button>
+        </section>
+      ) : null}
       <FormError message={error} />
       <div className="grid gap-2">
         <Button onClick={() => void download()} disabled={busy}>
           {busy ? "Preparing PDF..." : "Download printable PDF"}
         </Button>
-        <LinkButton href="/dashboard" variant="secondary">Continue to dashboard</LinkButton>
+        <LinkButton
+          href="/dashboard"
+          variant="secondary"
+          onClick={() => void getServices().venues.markRecoveryCodeShown()}
+        >
+          Continue to dashboard
+        </LinkButton>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button, TextField } from "@/components/ui";
+import { DEMO_CLOUD } from "@/lib/demo-cloud/config";
 import { emailError } from "@/lib/validation";
 import { getServices } from "@/services";
 
@@ -50,6 +51,11 @@ export default function LoginPage() {
         {" · "}
         <Link href="/signup" className="font-semibold text-brand-700">Create an account</Link>
       </p>
+      {DEMO_CLOUD ? (
+        <p className="text-center text-sm">
+          <Link href="/open-venue" className="font-semibold text-brand-700">Open my venue</Link>
+        </p>
+      ) : null}
     </form>
   );
 }

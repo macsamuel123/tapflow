@@ -36,8 +36,9 @@ export function GuestOrderStatus({
   const order = data?.order ?? null;
   const [simulate, setSimulate] = useState(false);
   useLive(() => void reload());
-  const cloud = DEMO_CLOUD && SHARED_SLUGS.includes(slug);
-  useRealtime(cloud ? { kind: "order", id: orderId } : null, () => void reload());
+  useRealtime(DEMO_CLOUD ? { kind: "order", id: orderId } : null, () => void reload());
+  // On a tester's own venue only the owner can move orders, so nothing stands in for staff.
+  const canSimulate = !DEMO_CLOUD || SHARED_SLUGS.includes(slug);
 
   const done = !order || ["delivered", "picked_up", "cancelled"].includes(order.status);
   useEffect(() => {
@@ -96,11 +97,13 @@ export function GuestOrderStatus({
         <p className="flex justify-between font-semibold text-ink"><span>Total</span><span>{formatCents(order.totalCents, order.currency)}</span></p>
       </Card>
 
-      <label className="flex min-h-11 items-center gap-2 rounded-xl bg-spark/30 px-3 py-2 text-sm font-medium text-ink">
-        <input type="checkbox" className="size-5 accent-brand-700" checked={simulate} onChange={(e) => setSimulate(e.target.checked)} />
-        Simulate staff (demo)
-      </label>
-      {cloud ? null : <p className="text-xs text-gray-500">Live updates work in this browser only for now.</p>}
+      {canSimulate ? (
+        <label className="flex min-h-11 items-center gap-2 rounded-xl bg-spark/30 px-3 py-2 text-sm font-medium text-ink">
+          <input type="checkbox" className="size-5 accent-brand-700" checked={simulate} onChange={(e) => setSimulate(e.target.checked)} />
+          Simulate staff (demo)
+        </label>
+      ) : null}
+      {DEMO_CLOUD ? null : <p className="text-xs text-gray-500">Live updates work in this browser only for now.</p>}
       {menuHref ? <LinkButton href={menuHref} variant="secondary" className="w-full">Back to menu</LinkButton> : null}
     </main>
   );

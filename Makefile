@@ -38,7 +38,7 @@ test-db: ## pgTAP tests (RLS, grants, status guard) — needs `supabase start`
 	fi
 
 demo-db: ## Load supabase/demo/*.sql into the local database (safe to re-run)
-	cat supabase/demo/001_schema.sql supabase/demo/002_functions.sql | docker exec -i supabase_db_tapflow psql -q -U postgres -v ON_ERROR_STOP=1 >/dev/null
+	cat supabase/demo/001_schema.sql supabase/demo/002_functions.sql supabase/demo/003_venues.sql | docker exec -i supabase_db_tapflow psql -q -U postgres -v ON_ERROR_STOP=1 >/dev/null
 
 e2e-cloud: demo-db ## Shared demo flow against local Supabase (S0.3)
 	./scripts/e2e-cloud.sh

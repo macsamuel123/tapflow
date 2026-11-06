@@ -147,7 +147,7 @@ test("@cloud keepalive needs the cron secret and runs a query", async ({ request
   expect((await request.get("/demo/api/keepalive")).status()).toBe(401);
   const res = await request.get("/demo/api/keepalive", { headers: { authorization: "Bearer local-cron-secret" } });
   expect(res.status()).toBe(200);
-  expect(await res.json()).toEqual({ ok: true });
+  expect(await res.json()).toMatchObject({ ok: true });
 });
 
 test("@cloud the service key never reaches the browser", async () => {

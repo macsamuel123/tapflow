@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Logo } from "@/components/ui/Logo";
 import { getServices, type Venue, type WorkspaceSummary } from "@/services";
-import { SHARED_DEMO_NOTE } from "@/lib/demo-cloud/config";
+import { CLOUD_VENUE_NOTE, SHARED_DEMO_NOTE } from "@/lib/demo-cloud/config";
 import { useRealtime, type LiveState } from "@/lib/use-realtime";
 import { DashboardContext } from "./DashboardContext";
 import { MORE_ICON, PRIMARY_NAV, SECONDARY_NAV, type NavItem } from "./nav";
@@ -46,20 +46,23 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const [shared, setShared] = useState(false);
+  const [cloudVenue, setCloudVenue] = useState(false);
   const [tick, setTick] = useState(0);
-  const live = useRealtime(shared && venue ? { kind: "venue", slug: venue.slug } : null, () =>
+  const live = useRealtime((shared || cloudVenue) && venue ? { kind: "venue", slug: venue.slug } : null, () =>
     setTick((t) => t + 1),
   );
 
   const refresh = useCallback(async () => {
     const services = getServices();
-    const [nextVenue, list, isShared] = await Promise.all([
-      services.venues.current(),
+    const nextVenue = await services.venues.current();
+    const [list, isShared, isCloudVenue] = await Promise.all([
       services.venues.listWorkspaces(),
       services.venues.isSharedDemo(),
+      services.venues.isCloudVenue(),
     ]);
     setVenue(nextVenue);
     setShared(isShared);
+    setCloudVenue(isCloudVenue);
     setWorkspaces(list);
     setWorkspaceId(list.find((w) => w.active)?.id ?? "");
     setVersion((v) => v + 1);
@@ -74,7 +77,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setMoreOpen(false), [pathname]);
 
-  const context = useMemo(() => (venue ? { venue, refresh, shared, tick } : null), [venue, refresh, shared, tick]);
+  const context = useMemo(
+    () => (venue ? { venue, refresh, shared, cloudVenue, tick } : null),
+    [venue, refresh, shared, cloudVenue, tick],
+  );
 
   async function switchWorkspace(id: string) {
     await getServices().venues.switchTo(id);
@@ -108,9 +114,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <p role="note" className="bg-spark px-4 py-1.5 text-center text-sm font-semibold text-ink">
             Demo mode — sample data
           </p>
-          {shared ? (
+          {shared || cloudVenue ? (
             <div className="flex items-center justify-between gap-2 bg-white px-4 py-1.5 text-xs text-gray-600">
-              <span data-testid="shared-note">{SHARED_DEMO_NOTE}</span>
+              <span data-testid={shared ? "shared-note" : "cloud-venue-note"}>
+                {shared ? SHARED_DEMO_NOTE : CLOUD_VENUE_NOTE}
+              </span>
               <span role="status" data-testid="connection" className="shrink-0 font-semibold">
                 <span aria-hidden className={`mr-1 inline-block size-2 rounded-full ${LIVE_COLOURS[live]}`} />
                 {LIVE_LABELS[live]}

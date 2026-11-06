@@ -163,6 +163,9 @@ export const mockServices: Services = {
     async requestPasswordReset() {
       // Demo mode sends no email.
     },
+    async openVenue() {
+      throw new ServiceError("Opening a venue needs the shared demo.");
+    },
     async logOut() {
       update((state) => {
         state.session = null;
@@ -177,10 +180,19 @@ export const mockServices: Services = {
     async isSharedDemo() {
       return false;
     },
+    async isCloudVenue() {
+      return false;
+    },
+    async recoveryCode() {
+      return null;
+    },
+    async markRecoveryCodeShown() {},
     async listWorkspaces() {
       const state = readState();
       const activeId = activeWorkspace(state).id;
-      return state.workspaces.map((w) => ({ id: w.id, name: w.venue.name, active: w.id === activeId }));
+      return state.workspaces
+        .filter((w) => !w.guestOnly)
+        .map((w) => ({ id: w.id, name: w.venue.name, active: w.id === activeId }));
     },
     async current() {
       return current().venue;

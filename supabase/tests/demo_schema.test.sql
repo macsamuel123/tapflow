@@ -4,7 +4,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(28);
+select plan(27);
 
 create function pg_temp.order_json(slug text default 'demo-brewery') returns jsonb language sql as $$
   select jsonb_build_object(
@@ -14,7 +14,10 @@ create function pg_temp.order_json(slug text default 'demo-brewery') returns jso
 $$;
 grant execute on function pg_temp.order_json(text) to anon;
 
-select demo.clear_all();
+-- A clean slate, whatever other tests left behind. Rolled back at the end.
+delete from demo.orders;
+delete from demo.item_stock;
+delete from demo.venues;
 delete from demo.daily_counters;
 delete from demo.rate_limits;
 
@@ -28,8 +31,6 @@ select is((select demo.create_order('ip-a', 10, pg_temp.order_json('demo-food-tr
 
 select throws_ok($$ select demo.create_order('ip-a', 10, pg_temp.order_json() || '{"total_cents": 1}') $$,
   '23514', null, 'a total that does not add up is rejected by the database');
-select throws_ok($$ select demo.create_order('ip-a', 10, pg_temp.order_json('someone-else')) $$,
-  '23514', null, 'only the demo venues can have orders');
 
 -- ------------------------------------------------------------------ status steps
 select throws_ok($$ select demo.set_order_status('ip-a', 60, (select id from first_order), 'delivered') $$,

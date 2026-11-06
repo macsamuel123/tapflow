@@ -4,7 +4,11 @@ import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { ServiceError } from "@/services/types";
 import type { DemoOrderRow, DemoStockRow } from "./config";
 
-export type LiveScope = { kind: "venue"; slug: string } | { kind: "order"; id: string } | { kind: "stock"; slug: string };
+export type LiveScope =
+  | { kind: "venue"; slug: string }
+  | { kind: "order"; id: string }
+  | { kind: "stock"; slug: string }
+  | { kind: "menu"; slug: string };
 
 const PROBE_TIMEOUT_MS = 2500;
 
@@ -66,13 +70,59 @@ export async function probe(): Promise<boolean> {
   }
 }
 
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
+export async function postJson<T>(path: string, body: unknown, venueKey?: string): Promise<T> {
+  return send<T>(path, { method: "POST", body: JSON.stringify(body) }, venueKey);
+}
+
+export async function patchJson<T>(path: string, body: unknown, venueKey: string): Promise<T> {
+  return send<T>(path, { method: "PATCH", body: JSON.stringify(body) }, venueKey);
+}
+
+export async function getJson<T>(path: string, venueKey: string): Promise<T> {
+  return send<T>(path, { method: "GET" }, venueKey);
+}
+
+export async function sendPhoto(path: string, photo: Blob, venueKey: string): Promise<{ url: string }> {
+  return send(path, { method: "POST", body: photo, headers: { "Content-Type": "image/jpeg" } }, venueKey);
+}
+
+export async function deletePath(path: string, venueKey: string): Promise<void> {
+  await send(path, { method: "DELETE" }, venueKey);
+}
+
+/** What a guest's phone can read about a tester's venue: never tokens. */
+export async function fetchPublicVenue(slug: string, touchpointId: string) {
+  const db = await demo();
+  const venue = await db.from("venues").select("id, slug, name, industry, country, currency, menu_version").eq("slug", slug).maybeSingle();
+  if (venue.error) throw unavailable();
+  if (!venue.data) return null;
+  const venueId = venue.data.id as string;
+  const [menu, touchpoints] = await Promise.all([
+    db.from("venue_menus").select("menu").eq("venue_id", venueId).maybeSingle(),
+    db.from("touchpoints").select("id, label, service_mode, spot_number, active").eq("venue_id", venueId).eq("id", touchpointId),
+  ]);
+  if (menu.error || touchpoints.error) throw unavailable();
+  const touchpoint = touchpoints.data[0];
+  if (!menu.data || !touchpoint) return null;
+  return { venue: venue.data, menu: menu.data.menu as unknown, touchpoint };
+}
+
+export async function fetchVenueName(slug: string): Promise<{ name: string; currency: string } | null> {
+  const { data, error } = await (await demo()).from("venues").select("name, currency").eq("slug", slug).maybeSingle();
+  if (error) throw unavailable();
+  return data as { name: string; currency: string } | null;
+}
+
+async function send<T>(path: string, init: RequestInit, venueKey?: string): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      ...init,
+      headers: {
+        ...(init.body && !init.headers ? { "Content-Type": "application/json" } : {}),
+        ...init.headers,
+        ...(venueKey ? { "x-venue-key": venueKey } : {}),
+      },
     });
   } catch {
     throw unavailable();
@@ -102,8 +152,10 @@ export async function subscribe(
     channel = listen(channel, "item_stock", `venue_slug=eq.${scope.slug}`);
   } else if (scope.kind === "order") {
     channel = listen(channel, "orders", `id=eq.${scope.id}`);
-  } else {
+  } else if (scope.kind === "stock") {
     channel = listen(channel, "item_stock", `venue_slug=eq.${scope.slug}`);
+  } else {
+    channel = listen(channel, "venues", `slug=eq.${scope.slug}`);
   }
   // SUBSCRIBED only means the socket joined. Database changes flow once this system message
   // arrives, and on a cold project that can be seconds later: orders in that gap would be missed

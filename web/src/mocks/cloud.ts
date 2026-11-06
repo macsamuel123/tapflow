@@ -1,26 +1,119 @@
-// The shared demo: mock services, with the fixed demo venues' orders and sold-out state moved to
-// the cloud. A tester's own venue falls through to the same-browser mock.
-import { postJson, fetchOrder, fetchOrders, fetchStock } from "@/lib/demo-cloud/browser";
-import { READ_ONLY_NOTE, SHARED_SLUGS, type DemoOrderRow } from "@/lib/demo-cloud/config";
+// The shared demo. The fixed demo venues keep their code menus, with orders and sold-out in the
+// cloud. A tester's venue is saved in the cloud too: this browser keeps a working copy, runs the
+// same mock edits on it, then sends the result to the server, which validates and stores it.
+import {
+  deletePath,
+  fetchOrder,
+  fetchOrders,
+  fetchPublicVenue,
+  fetchStock,
+  fetchVenueName,
+  getJson,
+  patchJson,
+  postJson,
+  sendPhoto,
+} from "@/lib/demo-cloud/browser";
+import { READ_ONLY_NOTE, SHARED_SLUGS, type DemoOrderRow, type VenueSnapshot } from "@/lib/demo-cloud/config";
 import { ServiceError } from "@/services/types";
-import type { GuestContext, GuestOrder, GuestService, Order, OrderStatus, Services } from "@/services/types";
-import { demoBrewery, demoFoodTruck, YOUR_VENUE_ID } from "./fixtures";
-import { activeWorkspace, readState, update } from "./store";
+import type {
+  GuestContext,
+  GuestOrder,
+  GuestService,
+  MenuCategory,
+  Order,
+  OrderStatus,
+  ServiceMode,
+  Services,
+  Session,
+  Touchpoint,
+  Venue,
+} from "@/services/types";
+import { BREWERY_ID, demoBrewery, demoFoodTruck, FOOD_TRUCK_ID, GST, PST, workspaceFromSignUp } from "./fixtures";
+import { activeWorkspace, readState, update, type Workspace } from "./store";
 
 const FIXED_MENUS = [demoBrewery(), demoFoodTruck()];
+const FIXED_IDS = [BREWERY_ID, FOOD_TRUCK_ID];
+const NOT_VERIFIED = "not-verified";
 
-function inOwnVenue(): boolean {
-  return activeWorkspace(readState()).id === YOUR_VENUE_ID;
+function active(): Workspace {
+  return activeWorkspace(readState());
 }
 
-function isShared(context: Pick<GuestContext, "slug" | "touchpointId">): boolean {
+function inFixedDemo(): boolean {
+  return FIXED_IDS.includes(active().id);
+}
+
+function isFixedContext(context: Pick<GuestContext, "slug" | "touchpointId">): boolean {
   return FIXED_MENUS.some(
     (w) => w.venue.slug === context.slug && w.touchpoints.some((t) => t.id === context.touchpointId),
   );
 }
 
-function requireOwnVenue(): void {
-  if (!inOwnVenue()) throw new ServiceError(`${READ_ONLY_NOTE}.`);
+
+function workspaceId(venueId: string): string {
+  return `venue-${venueId}`;
+}
+
+function fromSnapshot(snapshot: VenueSnapshot, code: string, previous?: Workspace, codeShown = true): Workspace {
+  return {
+    id: workspaceId(snapshot.venue.id),
+    venue: snapshot.venue,
+    spotType: previous?.spotType ?? "table",
+    touchpoints: snapshot.touchpoints,
+    orders: [],
+    menu: snapshot.menu,
+    staff: previous?.staff ?? [],
+    payment: previous?.payment ?? { connected: false, accountLabel: null },
+    taxes: previous?.taxes ?? [GST, PST],
+    sampleMenu: snapshot.sampleMenu,
+    carts: previous?.carts ?? {},
+    cloud: { venueId: snapshot.venue.id, code, version: snapshot.version, codeShown },
+  };
+}
+
+function storeOwned(snapshot: VenueSnapshot, code: string, makeActive: boolean, codeShown = true): void {
+  update((state) => {
+    const id = workspaceId(snapshot.venue.id);
+    const previous = state.workspaces.find((w) => w.id === id);
+    const next = fromSnapshot(snapshot, code, previous, previous?.cloud?.codeShown ?? codeShown);
+    state.workspaces = [next, ...state.workspaces.filter((w) => w.id !== id)];
+    if (makeActive) state.activeId = id;
+  });
+}
+
+/** Writes are serial, so each one starts from the version the last one produced. */
+let saving: Promise<unknown> = Promise.resolve();
+
+function save(change: { menu?: boolean; touchpoints?: boolean; details?: object }): Promise<void> {
+  const run = saving.catch(() => undefined).then(async () => {
+    const { cloud, menu, touchpoints, sampleMenu } = active();
+    if (!cloud) return;
+    try {
+      const { snapshot } = await patchJson<{ snapshot: VenueSnapshot }>(
+        `/demo/api/venues/${cloud.venueId}`,
+        {
+          version: cloud.version,
+          ...(change.menu ? { menu, sampleMenu } : {}),
+          ...(change.touchpoints ? { touchpoints } : {}),
+          ...(change.details ? { details: change.details } : {}),
+        },
+        cloud.code,
+      );
+      storeOwned(snapshot, cloud.code, false);
+    } catch (err) {
+      await pull().catch(() => undefined); // the server's copy wins, so this browser can't drift
+      throw err;
+    }
+  });
+  saving = run;
+  return run;
+}
+
+async function pull(): Promise<void> {
+  const { cloud } = active();
+  if (!cloud) return;
+  const { snapshot } = await getJson<{ snapshot: VenueSnapshot }>(`/demo/api/venues/${cloud.venueId}`, cloud.code);
+  storeOwned(snapshot, cloud.code, false);
 }
 
 /** Copies the shared sold-out state over the fixed menu kept in this browser. */
@@ -51,6 +144,57 @@ async function trySyncStock(slug: string): Promise<void> {
   }
 }
 
+/** Brings a tester's venue into this browser for a guest. Returns false if it doesn't exist. */
+async function loadGuestVenue(context: GuestContext): Promise<boolean> {
+  const found = await fetchPublicVenue(context.slug, context.touchpointId);
+  if (!found) return false;
+  const { verified } = await postJson<{ verified: boolean }>("/demo/api/access", context);
+  const point: Touchpoint = {
+    id: found.touchpoint.id as string,
+    label: found.touchpoint.label as string,
+    serviceMode: found.touchpoint.service_mode as ServiceMode,
+    spotNumber: found.touchpoint.spot_number as number | null,
+    active: found.touchpoint.active as boolean,
+    // Tokens never reach a guest. The server's answer is recorded so the guest logic can use it.
+    token: verified ? (context.token ?? "") : NOT_VERIFIED,
+  };
+  update((state) => {
+    const venueId = found.venue.id as string;
+    const owned = state.workspaces.find((w) => w.cloud?.venueId === venueId);
+    if (owned) {
+      owned.menu = found.menu as MenuCategory[];
+      return;
+    }
+    const id = `guest-${venueId}`;
+    const previous = state.workspaces.find((w) => w.id === id);
+    const others = previous?.touchpoints.filter((t) => t.id !== point.id) ?? [];
+    const cached: Workspace = {
+      id,
+      venue: {
+        id: venueId,
+        slug: found.venue.slug as string,
+        name: found.venue.name as string,
+        industry: found.venue.industry as Venue["industry"],
+        country: found.venue.country as "CA" | "US",
+        region: "",
+        currency: found.venue.currency as string,
+      },
+      spotType: "table",
+      touchpoints: [...others, point],
+      orders: [],
+      menu: found.menu as MenuCategory[],
+      staff: [],
+      payment: { connected: false, accountLabel: null },
+      taxes: [GST, PST],
+      sampleMenu: false,
+      carts: previous?.carts ?? {},
+      guestOnly: true,
+    };
+    state.workspaces = [...state.workspaces.filter((w) => w.id !== id), cached];
+  });
+  return true;
+}
+
 function toOrder(row: DemoOrderRow): Order {
   return {
     id: row.id,
@@ -74,49 +218,104 @@ function nextStep(row: DemoOrderRow): OrderStatus | null {
   return row.service_mode === "pickup" ? "picked_up" : "delivered";
 }
 
-function setStatus(id: string, status: OrderStatus) {
-  return postJson(`/demo/api/orders/${id}/status`, { status });
+function setStatus(id: string, status: OrderStatus, venueKey?: string) {
+  return postJson(`/demo/api/orders/${id}/status`, { status }, venueKey);
+}
+
+function workspaceWithTouchpoint(context: Pick<GuestContext, "slug" | "touchpointId">): Workspace | undefined {
+  return readState().workspaces.find(
+    (w) => w.venue.slug === context.slug && w.touchpoints.some((t) => t.id === context.touchpointId),
+  );
+}
+
+function cartLines(context: GuestContext) {
+  return (workspaceWithTouchpoint(context)?.carts[context.touchpointId] ?? []).map(
+    ({ itemId, optionIds, quantity, notes }) => ({ itemId, optionIds, quantity, notes }),
+  );
+}
+
+function photoName(url: string | null): string | null {
+  return url?.split("/").at(-1) ?? null;
+}
+
+function findPhoto(itemId: string): string | null {
+  return active().menu.flatMap((c) => c.items).find((i) => i.id === itemId)?.photoUrl ?? null;
+}
+
+function setStoredPhoto(itemId: string, url: string | null): void {
+  update((state) => {
+    const item = activeWorkspace(state).menu.flatMap((c) => c.items).find((i) => i.id === itemId);
+    if (item) item.photoUrl = url;
+  });
+}
+
+async function deleteStoredPhoto(url: string | null): Promise<void> {
+  const { cloud } = active();
+  const name = photoName(url);
+  if (cloud && name) await deletePath(`/demo/api/venues/${cloud.venueId}/photo?name=${name}`, cloud.code).catch(() => undefined);
 }
 
 export function cloudServices(mock: Services): Services {
-  const { guest, menu, orders, touchpoints, venues } = mock;
-  const currentSlug = () => activeWorkspace(readState()).venue.slug;
+  const { auth, guest, menu, orders, touchpoints, venues } = mock;
+
+  /** A venue edit: refused on the fixed demos, and sent to the server on a tester's venue. */
+  function edited<S extends object, K extends keyof S>(
+    service: S,
+    names: readonly K[],
+    part: { menu?: boolean; touchpoints?: boolean },
+  ): Pick<S, K> {
+    const entries = names.map((name) => {
+      const method = service[name] as (...args: unknown[]) => Promise<unknown>;
+      const wrapped = async (...args: unknown[]) => {
+        if (inFixedDemo()) throw new ServiceError(`${READ_ONLY_NOTE}.`);
+        const result = await method(...args);
+        await save(part);
+        return result;
+      };
+      return [name, wrapped];
+    });
+    return Object.fromEntries(entries) as Pick<S, K>;
+  }
 
   const cloudGuest: GuestService = {
     ...guest,
     async open(context) {
-      if (isShared(context)) await trySyncStock(context.slug);
+      if (isFixedContext(context)) {
+        await trySyncStock(context.slug);
+      } else if (!(await loadGuestVenue(context))) {
+        return null;
+      }
       return guest.open(context);
     },
     async getCart(context) {
-      if (isShared(context)) await trySyncStock(context.slug);
+      if (isFixedContext(context)) await trySyncStock(context.slug);
       return guest.getCart(context);
     },
     async addItem(context, line) {
-      if (isShared(context)) await trySyncStock(context.slug);
+      if (isFixedContext(context)) await trySyncStock(context.slug);
       return guest.addItem(context, line);
     },
     async placeOrder(context, guestName) {
-      if (!isShared(context)) return guest.placeOrder(context, guestName);
-      const lines = readCartLines(context.touchpointId, context.slug);
       const { id } = await postJson<{ id: string }>("/demo/api/orders", {
         slug: context.slug,
         touchpointId: context.touchpointId,
         token: context.token,
         guestName,
-        lines,
+        lines: cartLines(context),
       });
       update((state) => {
-        const workspace = state.workspaces.find((w) => w.venue.slug === context.slug && w.id !== YOUR_VENUE_ID);
+        const workspace = state.workspaces.find(
+          (w) => w.venue.slug === context.slug && w.touchpoints.some((t) => t.id === context.touchpointId),
+        );
         if (workspace) workspace.carts[context.touchpointId] = [];
       });
       return id;
     },
     async getOrder(slug, orderId) {
-      if (!SHARED_SLUGS.includes(slug)) return guest.getOrder(slug, orderId);
       const row = await fetchOrder(orderId);
       if (!row) return guest.getOrder(slug, orderId);
-      const venue = FIXED_MENUS.find((w) => w.venue.slug === slug)?.venue;
+      const fixed = FIXED_MENUS.find((w) => w.venue.slug === slug)?.venue;
+      const venue = fixed ?? (await fetchVenueName(slug));
       const order: GuestOrder = {
         ...toOrder(row),
         venueName: venue?.name ?? slug,
@@ -126,7 +325,7 @@ export function cloudServices(mock: Services): Services {
     },
     async simulateNextStep(slug, orderId) {
       const row = SHARED_SLUGS.includes(slug) ? await fetchOrder(orderId) : null;
-      if (!row) return guest.simulateNextStep(slug, orderId);
+      if (!row) return;
       const next = nextStep(row);
       if (next) await setStatus(orderId, next);
     },
@@ -135,24 +334,98 @@ export function cloudServices(mock: Services): Services {
   return {
     ...mock,
     guest: cloudGuest,
+    auth: {
+      ...auth,
+      async signUp(input) {
+        const session: Session = { name: input.name.trim(), email: input.email.trim() };
+        const draft = workspaceFromSignUp({
+          industry: input.industry,
+          venueName: input.venueName.trim(),
+          country: input.country,
+          region: input.region,
+          setup: input.setup,
+          menuRows: input.menuRows,
+          ...session,
+        });
+        // The owner's name, email and password stay out of the cloud on purpose.
+        const { code, snapshot } = await postJson<{ code: string; snapshot: VenueSnapshot }>("/demo/api/venues", {
+          name: draft.venue.name,
+          industry: draft.venue.industry,
+          country: draft.venue.country,
+          region: draft.venue.region,
+          menu: draft.menu,
+          sampleMenu: draft.sampleMenu,
+          touchpoints: draft.touchpoints,
+        });
+        update((state) => {
+          const id = workspaceId(snapshot.venue.id);
+          const next = { ...fromSnapshot(snapshot, code, draft, false), id, spotType: input.setup.spotType };
+          state.session = session;
+          state.workspaces = [next, ...state.workspaces];
+          state.activeId = id;
+        });
+        return session;
+      },
+      async openVenue(rawCode) {
+        const code = rawCode.trim().toUpperCase();
+        const { snapshot } = await postJson<{ snapshot: VenueSnapshot }>("/demo/api/venues/open", { code });
+        storeOwned(snapshot, code, true);
+        update((state) => {
+          state.session ??= { name: snapshot.venue.name, email: "" };
+        });
+      },
+    },
     venues: {
       ...venues,
       async isSharedDemo() {
-        return !inOwnVenue();
+        return inFixedDemo();
+      },
+      async isCloudVenue() {
+        return active().cloud !== undefined;
+      },
+      async recoveryCode() {
+        const { cloud } = active();
+        return cloud && !cloud.codeShown ? cloud.code : null;
+      },
+      async markRecoveryCodeShown() {
+        update((state) => {
+          const { cloud } = activeWorkspace(state);
+          if (cloud) cloud.codeShown = true;
+        });
+      },
+      async current() {
+        if (active().cloud) await pull().catch(() => undefined);
+        return venues.current();
       },
       async updateDetails(details) {
-        requireOwnVenue();
-        return venues.updateDetails(details);
+        if (inFixedDemo()) throw new ServiceError(`${READ_ONLY_NOTE}.`);
+        const { slug } = active().venue;
+        await venues.updateDetails(details);
+        // A venue keeps its slug when renamed, or every printed QR would break.
+        update((state) => {
+          activeWorkspace(state).venue.slug = slug;
+        });
+        await save({ details });
+        return venues.current();
+      },
+      async resetDemo() {
+        // The recovery codes here may be the only copies, so a reset keeps these venues.
+        const kept = readState().workspaces.filter((w) => w.cloud);
+        const session = readState().session;
+        await venues.resetDemo();
+        update((state) => {
+          state.session = session;
+          state.workspaces = [...kept, ...state.workspaces];
+        });
       },
     },
     orders: {
       ...orders,
       async list() {
-        return inOwnVenue() ? orders.list() : (await fetchOrders(currentSlug())).map(toOrder);
+        return (await fetchOrders(active().venue.slug)).map(toOrder);
       },
       async summary() {
-        if (inOwnVenue()) return orders.summary();
-        const placed = (await fetchOrders(currentSlug())).filter((o) => o.status !== "cancelled");
+        const placed = (await fetchOrders(active().venue.slug)).filter((o) => o.status !== "cancelled");
         const revenueCents = placed.reduce((sum, o) => sum + o.total_cents, 0);
         const twice = 2 * revenueCents + placed.length;
         const divisor = 2 * placed.length;
@@ -163,53 +436,68 @@ export function cloudServices(mock: Services): Services {
         };
       },
       async setStatus(id, status) {
-        if (inOwnVenue()) return orders.setStatus(id, status);
-        await setStatus(id, status);
+        await setStatus(id, status, active().cloud?.code);
       },
     },
     menu: {
       ...menu,
       async list() {
-        if (!inOwnVenue()) await syncStock(currentSlug());
+        if (inFixedDemo()) await syncStock(active().venue.slug);
+        else await pull().catch(() => undefined);
         return menu.list();
       },
       async isSample() {
-        return inOwnVenue() ? menu.isSample() : false;
+        return inFixedDemo() ? false : menu.isSample();
       },
       async setInStock(itemId, inStock) {
-        if (inOwnVenue()) return menu.setInStock(itemId, inStock);
-        await postJson("/demo/api/stock", { slug: currentSlug(), itemId, soldOut: !inStock });
+        if (inFixedDemo()) {
+          await postJson("/demo/api/stock", { slug: active().venue.slug, itemId, soldOut: !inStock });
+          return;
+        }
+        await menu.setInStock(itemId, inStock);
+        await save({ menu: true });
       },
-      ...guarded(menu, [
-        "clearSample", "addCategory", "renameCategory", "reorderCategories", "deleteCategory",
-        "addItem", "updateItem", "deleteItem", "setAllergens", "setPhoto", "removePhoto", "importRows",
-      ]),
+      async setPhoto(itemId, photo) {
+        const { cloud } = active();
+        if (!cloud) throw new ServiceError(`${READ_ONLY_NOTE}.`);
+        const previous = findPhoto(itemId);
+        const { url } = await sendPhoto(`/demo/api/venues/${cloud.venueId}/photo`, photo, cloud.code);
+        setStoredPhoto(itemId, url);
+        await save({ menu: true });
+        await deleteStoredPhoto(previous);
+      },
+      async removePhoto(itemId) {
+        if (inFixedDemo()) throw new ServiceError(`${READ_ONLY_NOTE}.`);
+        const previous = findPhoto(itemId);
+        setStoredPhoto(itemId, null);
+        await save({ menu: true });
+        await deleteStoredPhoto(previous);
+      },
+      async deleteItem(itemId) {
+        if (inFixedDemo()) throw new ServiceError(`${READ_ONLY_NOTE}.`);
+        const previous = findPhoto(itemId);
+        setStoredPhoto(itemId, null);
+        await menu.deleteItem(itemId);
+        await save({ menu: true });
+        await deleteStoredPhoto(previous);
+      },
+      ...edited(
+        menu,
+        [
+          "clearSample", "addCategory", "renameCategory", "reorderCategories", "deleteCategory",
+          "addItem", "updateItem", "setAllergens", "importRows",
+        ],
+        { menu: true },
+      ),
     },
     touchpoints: {
       ...touchpoints,
-      ...guarded(touchpoints, ["applySetup", "addSpots", "addPickup", "removePickup", "setActive", "regenerateQr"]),
+      ...edited(
+        touchpoints,
+        ["applySetup", "addSpots", "addPickup", "removePickup", "setActive", "regenerateQr"],
+        { touchpoints: true },
+      ),
     },
   };
 }
 
-function guarded<S extends object, K extends keyof S>(service: S, names: readonly K[]): Pick<S, K> {
-  const entries = names.map((name) => {
-    const method = service[name] as (...args: unknown[]) => Promise<unknown>;
-    const wrapped = async (...args: unknown[]) => {
-      requireOwnVenue();
-      return method(...args);
-    };
-    return [name, wrapped];
-  });
-  return Object.fromEntries(entries) as Pick<S, K>;
-}
-
-function readCartLines(touchpointId: string, slug: string) {
-  const workspace = readState().workspaces.find((w) => w.venue.slug === slug && w.id !== YOUR_VENUE_ID);
-  return (workspace?.carts[touchpointId] ?? []).map(({ itemId, optionIds, quantity, notes }) => ({
-    itemId,
-    optionIds,
-    quantity,
-    notes,
-  }));
-}

@@ -8,6 +8,8 @@ export type DashboardValue = {
   refresh: () => Promise<void>;
   /** A demo venue shared across devices: read-only apart from orders and sold-out. */
   shared: boolean;
+  /** A tester's venue saved in the cloud. Editable, and live like the demos. */
+  cloudVenue: boolean;
   /** Counts up whenever shared data changes, so pages know to reload. */
   tick: number;
 };
