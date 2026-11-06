@@ -164,7 +164,7 @@ Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `
 
 **Owner onboarding.** A first sign-in with no membership shows a "Create venue" form. The seed creates a demo owner and fulfillment user.
 
-**CSV import.** Columns: `category,name,description,price,tax_type,sold_out,allergens`. `price` is in dollars and is converted to integer cents, `tax_type` is `food` or `alcohol`, and `allergens` is required and pipe-separated, with `none` for no listed allergens. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
+**CSV import.** Columns: `category,name,description,price,tax_type,allergens`, plus an optional `sold_out` (`yes/no`, `y/n`, `true/false`, `1/0` or `sold out/available`, in any case), which isn't in the template because owners use the toggle after import. New items default to available, and a blank value leaves an existing item's status alone. `price` is in dollars and is converted to integer cents, `tax_type` is `food` or `alcohol`, and `allergens` is required, separated by pipes or commas, with `none` for no listed allergens. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
 
 ## 5. Deviations and gaps vs the BRD
 

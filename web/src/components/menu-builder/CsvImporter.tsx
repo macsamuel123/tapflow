@@ -113,8 +113,8 @@ export function CsvImporter({
         {rows ? null : (
           <>
             <p className="text-gray-600">
-              Columns: category, name, description, price, tax_type, sold_out, allergens. Add options and
-              photos afterwards. Up to 1,000 rows and 1 MB.
+              Columns: category, name, description, price, tax_type, allergens. Add options and photos
+              afterwards, and mark items sold out with the toggle. Up to 1,000 rows and 1 MB.
             </p>
             <Button variant="secondary" onClick={() => downloadText(TEMPLATE_NAME, TEMPLATE_CSV)}>Download template</Button>
           </>

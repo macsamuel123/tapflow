@@ -31,7 +31,7 @@ test("@saas CSV: 5 valid + 2 invalid preview correctly and import 5", async ({ p
   await expect(invalid).toHaveCount(2);
   await expect(invalid.nth(0)).toContainText("Row 7");
   await expect(invalid.nth(0)).toContainText("Missing category");
-  await expect(invalid.nth(1)).toContainText("Bad price; Unknown tax_type; sold_out must be yes or no");
+  await expect(invalid.nth(1)).toContainText("Bad price; Unknown tax_type; Unknown sold_out value");
 
   await importer.getByRole("button", { name: "Import 5 items" }).click();
   await expect(importer.getByRole("status")).toHaveText("Imported 5 items, 2 skipped");
@@ -87,6 +87,58 @@ test("@saas CSV allergens: blank is invalid, none is accepted, and none can't mi
   await expect(importer.getByRole("status")).toHaveText("Imported 1 item, 2 skipped");
   await importer.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("list", { name: "Allergens in Plain" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
+});
+
+test("@saas CSV sold_out: the column is optional, and items default to available", async ({ page }) => {
+  const importer = await openImporter(page);
+  await importer.getByLabel("Choose CSV file").setInputFiles(
+    csvFile("category,name,price,tax_type,allergens\nMains,No column,1.00,food,none\n"),
+  );
+  await importer.getByRole("button", { name: "Import 1 item" }).click();
+  await importer.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("switch", { name: "No column sold out" })).toHaveAttribute("aria-checked", "false");
+});
+
+test("@saas CSV sold_out: blank means available, and yes/no/true/false are accepted", async ({ page }) => {
+  const importer = await openImporter(page);
+  await importer.getByLabel("Choose CSV file").setInputFiles(
+    csvFile(
+      [
+        HEADER,
+        "Mains,Blank,,1.00,food,,none",
+        "Mains,Said yes,,1.00,food,yes,none",
+        "Mains,Said no,,1.00,food,no,none",
+        "Mains,Said true,,1.00,food,TRUE,none",
+        "Mains,Said false,,1.00,food,false,none",
+        "Mains,Said maybe,,1.00,food,maybe,none",
+      ].join("\n"),
+    ),
+  );
+  await expect(importer.getByTestId("csv-invalid")).toHaveCount(1);
+  await expect(importer.getByTestId("csv-invalid")).toContainText('Unknown sold_out value "maybe": use yes/no, y/n, true/false, 1/0 or sold out/available');
+  await importer.getByRole("button", { name: "Import 5 items" }).click();
+  await importer.getByRole("button", { name: "Done" }).click();
+  const expected = { Blank: "false", "Said yes": "true", "Said no": "false", "Said true": "true", "Said false": "false" };
+  for (const [name, soldOut] of Object.entries(expected)) {
+    await expect(page.getByRole("switch", { name: `${name} sold out` }), name).toHaveAttribute("aria-checked", soldOut);
+  }
+});
+
+test("@saas CSV sold_out: updating with no value keeps the toggle, a value changes it", async ({ page }) => {
+  await page.getByRole("switch", { name: "Cedar IPA sold out" }).click();
+  const update = async (row: string) => {
+    const importer = await openImporter(page);
+    await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(`${HEADER}\n${row}\n`));
+    await importer.getByLabel("Update them").check();
+    await importer.getByRole("button", { name: "Import 1 item" }).click();
+    await importer.getByRole("button", { name: "Done" }).click();
+  };
+  const toggle = page.getByRole("switch", { name: "Cedar IPA sold out" });
+
+  await update("On tap,Cedar IPA,,9.50,alcohol,,wheat");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await update("On tap,Cedar IPA,,9.50,alcohol,no,wheat");
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
 });
 
 test("@saas CSV allergens: a file without the column is rejected", async ({ page }) => {

@@ -10,12 +10,14 @@ export const TEMPLATE_NAME = "tapflow-menu-template.csv";
 const COLUMNS = ["category", "name", "description", "price", "tax_type", "sold_out", "allergens"];
 const REQUIRED_COLUMNS = ["category", "name", "price", "tax_type", "allergens"];
 const NOT_CSV = "That doesn't look like a CSV file. Choose a .csv file.";
+const SOLD_OUT_HELP = "yes/no, y/n, true/false, 1/0 or sold out/available";
 
+// sold_out is left out of the template: owners set it with the toggle after import.
 export const TEMPLATE_CSV = [
-  COLUMNS.join(","),
-  'Mains,Smash burger,"Double patty, pickles, house sauce",18.00,food,no,milk|wheat',
-  "Drinks,Harbour Lager,Crisp and clean,8.00,alcohol,no,wheat",
-  "Drinks,Sparkling lemonade,,5.00,food,yes,none",
+  COLUMNS.filter((c) => c !== "sold_out").join(","),
+  'Mains,Smash burger,"Double patty, pickles, house sauce",18.00,food,milk|wheat',
+  "Drinks,Harbour Lager,Crisp and clean,8.00,alcohol,wheat",
+  "Drinks,Sparkling lemonade,,5.00,food,none",
 ].join("\r\n") + "\r\n";
 
 export type PreviewRow = {
@@ -34,17 +36,26 @@ function parseTax(value: string): TaxCategory | null {
   return tax === "alcohol" ? "Alcohol" : null;
 }
 
+// Spreadsheets add spaces, and quotes survive some exports, so these two columns are forgiving.
+const EDGE_NOISE = /^[\s"'`“”‘’]+|[\s"'`“”‘’]+$/g;
+const SOLD_OUT_VALUES = new Set(["yes", "y", "true", "1", "sold out"]);
+const AVAILABLE_VALUES = new Set(["no", "n", "false", "0", "available"]);
+
+function cleanValue(value: string): string {
+  return value.replace(EDGE_NOISE, "").replace(/\s+/g, " ").toLowerCase();
+}
+
 function parseSoldOut(value: string): boolean | null | "bad" {
-  const text = value.trim().toLowerCase();
+  const text = cleanValue(value);
   if (!text) return null;
-  if (text === "yes") return true;
-  return text === "no" ? false : "bad";
+  if (SOLD_OUT_VALUES.has(text)) return true;
+  return AVAILABLE_VALUES.has(text) ? false : "bad";
 }
 
 function parseAllergens(value: string): { ids: AllergenId[]; problem: string | null } {
-  const parts = value.split("|").map((p) => p.trim()).filter(Boolean);
+  const parts = value.split(/[|,]/).map(cleanValue).filter(Boolean);
   if (parts.length === 0) return { ids: [], problem: "allergens required — use none if none" };
-  if (parts.some((p) => p.toLowerCase() === "none")) {
+  if (parts.includes("none")) {
     return { ids: [], problem: parts.length > 1 ? "none can't be combined with allergens" : null };
   }
   const ids = parts.map(allergenFromCsv);
@@ -69,7 +80,9 @@ function checkRow(raw: Record<string, string>, extraColumns: boolean) {
   const taxCategory = parseTax(get("tax_type"));
   if (!taxCategory) reasons.push("Unknown tax_type");
   const soldOut = parseSoldOut(get("sold_out"));
-  if (soldOut === "bad") reasons.push("sold_out must be yes or no");
+  if (soldOut === "bad") {
+    reasons.push(`Unknown sold_out value "${get("sold_out").trim().slice(0, 30)}": use ${SOLD_OUT_HELP}`);
+  }
   const allergens = parseAllergens(get("allergens"));
   if (allergens.problem) reasons.push(allergens.problem);
 
@@ -100,7 +113,9 @@ export async function parseMenuCsv(text: string, existingKeys: ReadonlySet<strin
   const parsed = Papa.parse<Record<string, string>>(text.replace(/^﻿/, ""), {
     header: true,
     skipEmptyLines: "greedy",
-    transformHeader: (header) => header.trim().toLowerCase(),
+    // Not "|": it separates allergens. Semicolons are how Excel saves CSV in some regions.
+    delimitersToGuess: [",", ";", "\t"],
+    transformHeader: (header) => cleanValue(header).replace(/[ -]/g, "_"),
   });
   const headers = parsed.meta.fields ?? [];
   const missing = REQUIRED_COLUMNS.filter((c) => !headers.includes(c));
@@ -112,8 +127,12 @@ export async function parseMenuCsv(text: string, existingKeys: ReadonlySet<strin
 
   const seen = new Set<string>();
   const rows = parsed.data.map((record, i): PreviewRow => {
-    const { __parsed_extra: extra, ...raw } = record as Record<string, string> & { __parsed_extra?: unknown };
-    const checked = checkRow(raw, extra !== undefined);
+    const { __parsed_extra: rawExtra, ...raw } = record as Record<string, string> & { __parsed_extra?: string[] };
+    const extra = (rawExtra ?? []).filter((cell) => cell.trim());
+    // An unquoted "milk, wheat" in a last allergens column spills into extra cells.
+    const spilled = extra.length > 0 && headers.at(-1) === "allergens";
+    if (spilled) raw.allergens = [raw.allergens ?? "", ...extra].join(",");
+    const checked = checkRow(raw, extra.length > 0 && !spilled);
     let { row, reason } = checked;
     let duplicate = false;
     if (row) {

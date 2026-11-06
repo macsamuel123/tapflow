@@ -412,19 +412,20 @@ test("@saas the template itself imports cleanly", async ({ page }) => {
   await openPage(page, "Menu", "Menu");
   await page.getByRole("button", { name: "Upload CSV" }).click();
   const importer = page.getByRole("dialog");
+  await expect(importer.getByText(/^Columns: /)).not.toContainText("sold_out");
   const downloadPromise = page.waitForEvent("download");
   await importer.getByRole("button", { name: "Download template" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("tapflow-menu-template.csv");
   const template = await readFile(await download.path());
   const lines = template.toString("utf8").trim().split(/\r?\n/);
-  expect(lines[0]).toBe("category,name,description,price,tax_type,sold_out,allergens");
+  expect(lines[0]).toBe("category,name,description,price,tax_type,allergens");
   expect(lines).toHaveLength(4);
 
   await importer.getByLabel("Choose CSV file").setInputFiles({ name: "t.csv", mimeType: "text/csv", buffer: template });
   await importer.getByRole("button", { name: "Import 3 items" }).click();
   await expect(importer.getByRole("status")).toHaveText("Imported 3 items, 0 skipped");
   await importer.getByRole("button", { name: "Done" }).click();
-  await expect(category(page, "Drinks").getByRole("switch", { name: "Sparkling lemonade sold out" })).toHaveAttribute("aria-checked", "true");
+  await expect(category(page, "Drinks").getByRole("switch", { name: "Sparkling lemonade sold out" })).toHaveAttribute("aria-checked", "false");
   await expect(category(page, "Drinks").getByRole("list", { name: "Allergens in Sparkling lemonade" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
 });
