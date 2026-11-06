@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { ServiceSetupFields, type SetupForm } from "@/components/setup/ServiceSetupFields";
 import { Button, Card, FormError, LinkButton, SelectField, TextField } from "@/components/ui";
-import { READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
+import { DEMO_CLOUD, READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
 import { formatBps } from "@/lib/percent";
 import { COUNTRIES, REGIONS } from "@/lib/regions";
 import { parseSpotCount, validateSetup, type SetupErrors } from "@/lib/service-setup";
@@ -153,7 +153,11 @@ export default function SettingsPage() {
       ) : null}
       <Card className="space-y-2">
         <h2 className="text-lg font-bold text-ink">Demo</h2>
-        <p className="text-gray-600">Put the sample data back and remove the venue you signed up with.</p>
+        <p className="text-gray-600">
+          {DEMO_CLOUD
+            ? "Put the demo venues' sample data back. Venues you saved in the cloud are kept."
+            : "Put the sample data back and remove the venue you signed up with."}
+        </p>
         <Button variant="danger" onClick={() => void reset()}>Reset demo</Button>
       </Card>
     </div>

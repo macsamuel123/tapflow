@@ -7,7 +7,7 @@ import { ModifierSheet } from "@/components/modifier-sheet/ModifierSheet";
 import { Button, FormError, TextField } from "@/components/ui";
 import type { Cart, MenuItem } from "@/lib/api-types";
 import { LOCAL_VENUE_NOTE } from "@/lib/demo";
-import { CHECKOUT_NOTE, DEMO_CLOUD, SHARED_SLUGS } from "@/lib/demo-cloud/config";
+import { CHECKOUT_NOTE, DEMO_CLOUD, SHARED_SLUGS, VENUE_NOT_FOUND_NOTE } from "@/lib/demo-cloud/config";
 import { MAX_GUEST_NAME } from "@/lib/guest";
 import { SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
 import { formatCents } from "@/lib/money";
@@ -36,8 +36,14 @@ function NotFoundHere() {
   return (
     <main className="mx-auto max-w-md space-y-3 p-6">
       <h1 className="text-2xl font-black text-ink">We can&apos;t find this menu</h1>
-      <p role="note" className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
-      <p className="text-gray-600">Open this QR code in the browser you signed up with.</p>
+      {DEMO_CLOUD ? (
+        <p role="note" className="text-gray-600">{VENUE_NOT_FOUND_NOTE}</p>
+      ) : (
+        <>
+          <p role="note" className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{LOCAL_VENUE_NOTE}</p>
+          <p className="text-gray-600">Open this QR code in the browser you signed up with.</p>
+        </>
+      )}
     </main>
   );
 }
@@ -52,8 +58,8 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
   const [guestName, setGuestName] = useState("");
 
   useLive(() => void reload()); // sold-out, price and QR changes from the dashboard
-  const cloud = DEMO_CLOUD && SHARED_SLUGS.includes(context.slug);
-  useRealtime(cloud ? { kind: "stock", slug: context.slug } : null, () => void reload());
+  const fixedDemo = SHARED_SLUGS.includes(context.slug);
+  useRealtime(DEMO_CLOUD ? { kind: fixedDemo ? "stock" : "menu", slug: context.slug } : null, () => void reload());
   const { guest } = getServices();
 
   if (!data) return <div className="p-6"><FormError message={error} /></div>;

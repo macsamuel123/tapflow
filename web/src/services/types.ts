@@ -180,6 +180,8 @@ export interface AuthService {
   signUp(input: SignUpInput): Promise<Session>;
   logIn(email: string, password: string): Promise<Session>;
   requestPasswordReset(email: string): Promise<void>;
+  /** Opens a venue on this device. Only the shared demo has this. */
+  openVenue(code: string): Promise<void>;
   logOut(): Promise<void>;
 }
 
@@ -188,6 +190,11 @@ export interface VenueService {
   isLocalOnly(): Promise<boolean>;
   /** True for a demo venue shared across devices, whose menu and touchpoints are read-only. */
   isSharedDemo(): Promise<boolean>;
+  /** True for a tester's venue saved in the cloud: it works on any device. */
+  isCloudVenue(): Promise<boolean>;
+  /** The code to show the owner, once. Null if there's nothing to show. */
+  recoveryCode(): Promise<string | null>;
+  markRecoveryCodeShown(): Promise<void>;
   listWorkspaces(): Promise<WorkspaceSummary[]>;
   current(): Promise<Venue>;
   switchTo(workspaceId: string): Promise<void>;

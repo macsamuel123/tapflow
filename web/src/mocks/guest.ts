@@ -216,7 +216,7 @@ export const guestService: GuestService = {
       touchpointLabel: touchpoint.label,
       serviceMode: touchpoint.serviceMode,
       access: access(touchpoint, context.token),
-      localOnly: workspace.id === YOUR_VENUE_ID,
+      localOnly: workspace.id === YOUR_VENUE_ID && !workspace.cloud,
     };
     return venue;
   },

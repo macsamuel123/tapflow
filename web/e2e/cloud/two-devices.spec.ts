@@ -148,7 +148,7 @@ test("@cloud demo venues are read-only, and your own venue is not", async ({ bro
   await page.getByRole("button", { name: "Skip for now" }).click();
   await page.getByRole("link", { name: "Continue to dashboard" }).click();
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
-  await expect(page.getByTestId("connection")).toHaveCount(0);
+  await expect(page.getByTestId("cloud-venue-note")).toHaveText("Demo venue — deleted after 14 days of inactivity");
   await goTo(page, "Menu");
   await expect(page.getByRole("button", { name: "Add item" })).toBeVisible();
 });

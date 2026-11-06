@@ -26,6 +26,10 @@ export type Workspace = {
   sampleMenu: boolean;
   /** One cart per touchpoint. Lines hold choices only: every amount is worked out on read. */
   carts: Record<string, StoredCartLine[]>;
+  /** A tester's venue saved in the cloud. `code` is the recovery code, kept so edits can prove it. */
+  cloud?: { venueId: string; code: string; version: number; codeShown: boolean };
+  /** A copy of someone else's venue, cached for a guest's cart. Never shown as a workspace. */
+  guestOnly?: boolean;
 };
 
 export type StoredCartLine = {
@@ -43,7 +47,7 @@ export type DemoState = {
 };
 
 // Passwords are never kept. Bump the version when the shape of the state changes.
-const STORAGE_KEY = "tapflow:demo:v7";
+const STORAGE_KEY = "tapflow:demo:v8";
 
 function freshWorkspaces(): Workspace[] {
   return [demoBrewery(), demoFoodTruck()];

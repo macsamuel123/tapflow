@@ -25,8 +25,8 @@ export const BREWERY_ID = "demo-brewery";
 export const FOOD_TRUCK_ID = "demo-food-truck";
 export const YOUR_VENUE_ID = "your-venue";
 
-const GST: TaxRate = { code: "GST", name: "Goods and Services Tax", rateBps: 500 };
-const PST: TaxRate = { code: "PST", name: "Provincial Sales Tax", rateBps: 1000 };
+export const GST: TaxRate = { code: "GST", name: "Goods and Services Tax", rateBps: 500 };
+export const PST: TaxRate = { code: "PST", name: "Provincial Sales Tax", rateBps: 1000 };
 
 const GUESTS = ["Amara", "Noah", "Priya", "Leo", "Sofia", "Mateo", "Hana", "Owen", "Zoe"];
 const FIRST_TICKET = 7;

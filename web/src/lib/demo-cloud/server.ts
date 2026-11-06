@@ -30,6 +30,7 @@ const DATABASE_ERRORS: Record<string, [number, string]> = {
   rate_limited: [429, "Too many requests. Wait a minute and try again."],
   invalid_transition: [409, "That order can't move to that step."],
   not_found: [404, "That order no longer exists."],
+  version_conflict: [409, "This venue changed on another device. Try again."],
 };
 
 export function databaseError(message: string): NextResponse {

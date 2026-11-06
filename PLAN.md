@@ -351,6 +351,15 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 
 **Cloud project.** `tapflow` (ref `olnuudhjahlyclhfqqvk`) is in **West US (Oregon)**, not Canada Central, and we're keeping it there. Guest data, currently demo first names and orders, is therefore stored in the US. The future privacy policy must say so, and this matters more once real venues and M3 data arrive.
 
+**S0.4 own venues in the cloud.** With `NEXT_PUBLIC_DEMO_CLOUD=true`, a venue created in sign-up is saved to the `demo` schema, so its QR codes work on any phone and its orders reach the dashboard on any device.
+- `supabase/demo/003_venues.sql` adds venues, touchpoints and a menu document. QR tokens and recovery code hashes live in separate tables with no public access. Photos go in the public `demo-menu` Storage bucket: JPEG only, 500 KB each, 50 per venue.
+- Ownership without real auth: a recovery code, `TF-XXXX-XXXX-XXXX-XXXX`, is shown once at sign-up, kept in that browser and stored only as a SHA-256 hash. "Open my venue" on the login page opens the venue on another device. Edits, status changes and sold-out all need the code.
+- The browser keeps a working copy, runs the same menu logic, then saves to the server, which rebuilds and validates every field. `menu_version` stops a stale tab overwriting newer changes.
+- Limits: 5 new venues per IP per day, 300 items and 500 touchpoints per venue. A venue idle for 14 days is deleted with its orders and photos by the daily cron, which also runs keepalive. Orders, edits and owner dashboard opens count as activity.
+- `POST /demo/api/admin/delete-venue` takes down a venue by slug, using `DEMO_ADMIN_SECRET`.
+- **Region:** venue data and photos are stored in West US (Oregon). The future privacy policy must say so.
+- Branding has a nullable `venues.branding` column but no feature yet. It comes with the S0.2 gap fix. Staff and the mock Stripe status stay per browser, and owners' names and emails aren't stored.
+
 **Carries into M3:** the Supabase Cloud project, the Realtime and polling pattern, and server-side repricing. The `demo` schema itself doesn't carry over and can be dropped when the demo retires.
 
 **Known limits:** `anon` can read all demo orders, including first names, and login is mocked, so anyone can change a shared order's status. Testers on one wifi share a rate limit.
