@@ -60,6 +60,7 @@ export function quickRows(items: QuickItem[]): MenuImportRow[] {
       description: null,
       soldOut: null,
       allergens: item.allergens,
+      otherAllergens: "",
     }));
 }
 

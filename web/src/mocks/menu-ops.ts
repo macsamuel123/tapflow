@@ -36,11 +36,19 @@ export function applyImport(
     }
     if (existing) {
       existing.priceCents = row.priceCents;
-      existing.taxCategory = row.taxCategory;
+      if (row.taxCategory) {
+        existing.taxCategory = row.taxCategory;
+        existing.taxNote = null;
+      }
       existing.description = row.description ?? existing.description;
       existing.inStock = row.soldOut === null ? existing.inStock : !row.soldOut;
-      existing.allergens = row.allergens;
-      existing.sampleAllergens = false;
+      // A blank value never erases what's already declared.
+      if (row.allergens) {
+        existing.allergens = row.allergens;
+        existing.otherAllergens = row.otherAllergens;
+        existing.allergensDeclared = true;
+        existing.sampleAllergens = false;
+      }
       result.updated += 1;
       continue;
     }
@@ -49,9 +57,12 @@ export function applyImport(
       name: row.name.trim(),
       description: row.description ?? "",
       priceCents: row.priceCents,
-      taxCategory: row.taxCategory,
+      taxCategory: row.taxCategory ?? "Food",
+      taxNote: row.taxCategory ? null : "Tax type assumed: Food",
       inStock: !(row.soldOut ?? false),
-      allergens: row.allergens,
+      allergens: row.allergens ?? [],
+      allergensDeclared: row.allergens !== null,
+      otherAllergens: row.otherAllergens,
       sampleAllergens: false,
       optionGroups: [],
       photoUrl: null,

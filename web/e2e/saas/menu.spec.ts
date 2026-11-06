@@ -412,7 +412,7 @@ test("@saas the template itself imports cleanly", async ({ page }) => {
   await openPage(page, "Menu", "Menu");
   await page.getByRole("button", { name: "Upload CSV" }).click();
   const importer = page.getByRole("dialog");
-  await expect(importer.getByText(/^Columns: /)).not.toContainText("sold_out");
+  await expect(importer.getByText(/^Only name and price are required/)).not.toContainText("sold_out");
   const downloadPromise = page.waitForEvent("download");
   await importer.getByRole("button", { name: "Download template" }).click();
   const download = await downloadPromise;

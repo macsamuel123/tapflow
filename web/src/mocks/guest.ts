@@ -1,6 +1,6 @@
 import type { Cart, CartLine, Menu, MenuItem as GuestMenuItem } from "@/lib/api-types";
 import { checkLine, MAX_CART_LINES, MAX_QUANTITY, type CheckedLine } from "@/lib/cart-rules";
-import { allergenLabel } from "@/lib/menu/allergens";
+import { allergenLabel, ASK_STAFF_NOTE } from "@/lib/menu/allergens";
 import { quote, type PricingLine } from "@/lib/pricing";
 import { cleanGuestName, MAX_GUEST_NAME } from "@/lib/guest";
 import { ServiceError } from "@/services/types";
@@ -71,7 +71,7 @@ function items(workspace: Workspace): MenuItem[] {
 }
 
 function guestAllergens(item: MenuItem): string[] {
-  const labels = item.allergens.map(allergenLabel);
+  const labels = [...item.allergens.map(allergenLabel), ...(item.otherAllergens ? [item.otherAllergens] : [])];
   const last = labels.at(-1);
   // The item sheet prints these as "Contains: ...", so the sample warning has to travel with them.
   return item.sampleAllergens && last ? [...labels.slice(0, -1), `${last} (sample data)`] : labels;
@@ -86,6 +86,7 @@ function toGuestItem(item: MenuItem, workspace: Workspace): GuestMenuItem {
     image_url: item.photoUrl,
     ingredients: [],
     allergens: guestAllergens(item),
+    ...(item.allergensDeclared ? {} : { allergen_note: ASK_STAFF_NOTE }),
     dietary_tags: [],
     in_stock: item.inStock,
     tax_category: {

@@ -12,7 +12,7 @@ const FIVE_PLUS_TWO = [
   "Drinks,Red wine,By the glass,12.5,alcohol,yes,sulphites",
   "Drinks,Lemonade,,0,food,no,NONE",
   "Sides,Fries,,6.00,FOOD,NO,none",
-  ",No category or name,,5.00,food,no,none",
+  "Mains,,Nameless row,5.00,food,no,none",
   "Mains,Bad row,,12.345,wine,maybe,none",
 ].join("\n");
 
@@ -25,13 +25,13 @@ test("@saas CSV: 5 valid + 2 invalid preview correctly and import 5", async ({ p
   const importer = await openImporter(page);
   await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(FIVE_PLUS_TWO));
 
-  await expect(importer.getByRole("status")).toHaveText("5 ready to import, 2 with problems");
+  await expect(importer.getByRole("status")).toHaveText("5 ready to import, 0 with warnings, 2 rejected");
   await expect(importer.getByTestId("csv-valid")).toHaveCount(5);
   const invalid = importer.getByTestId("csv-invalid");
   await expect(invalid).toHaveCount(2);
   await expect(invalid.nth(0)).toContainText("Row 7");
-  await expect(invalid.nth(0)).toContainText("Missing category");
-  await expect(invalid.nth(1)).toContainText("Bad price; Unknown tax_type; Unknown sold_out value");
+  await expect(invalid.nth(0)).toContainText("Missing name");
+  await expect(invalid.nth(1)).toContainText("Bad price");
 
   await importer.getByRole("button", { name: "Import 5 items" }).click();
   await expect(importer.getByRole("status")).toHaveText("Imported 5 items, 2 skipped");
@@ -40,7 +40,7 @@ test("@saas CSV: 5 valid + 2 invalid preview correctly and import 5", async ({ p
   await importer.getByRole("button", { name: "Download skipped rows" }).click();
   const skipped = (await readFile(await (await downloadPromise).path())).toString("utf8");
   expect(skipped).toContain("Bad price");
-  expect(skipped).toContain("No category or name");
+  expect(skipped).toContain("Nameless row");
   expect(skipped.trim().split(/\r?\n/)).toHaveLength(3);
 
   await importer.getByRole("button", { name: "Done" }).click();
@@ -66,25 +66,10 @@ test("@saas CSV allergens: pipe-separated values become tags", async ({ page }) 
   ]);
 });
 
-test("@saas CSV allergens: an unknown value makes the row invalid with the reason", async ({ page }) => {
+test("@saas CSV allergens: none means no listed allergens", async ({ page }) => {
   const importer = await openImporter(page);
-  await importer.getByLabel("Choose CSV file").setInputFiles(
-    csvFile(`${HEADER}\nMains,Good,,1.00,food,no,milk\nMains,Bad,,1.00,food,no,milk|kiwi|nuts\n`),
-  );
-  await expect(importer.getByTestId("csv-invalid")).toContainText("Unknown allergen: kiwi, nuts");
-  await expect(importer.getByRole("button", { name: "Import 1 item" })).toBeVisible();
-});
-
-test("@saas CSV allergens: blank is invalid, none is accepted, and none can't mix", async ({ page }) => {
-  const importer = await openImporter(page);
-  await importer.getByLabel("Choose CSV file").setInputFiles(
-    csvFile(`${HEADER}\nMains,Blank,,1.00,food,no,\nMains,Mixed,,1.00,food,no,milk|none\nMains,Plain,,1.00,food,no,none\n`),
-  );
-  const invalid = importer.getByTestId("csv-invalid");
-  await expect(invalid.nth(0)).toContainText("allergens required — use none if none");
-  await expect(invalid.nth(1)).toContainText("none can't be combined with allergens");
+  await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(`${HEADER}\nMains,Plain,,1.00,food,no,none\n`));
   await importer.getByRole("button", { name: "Import 1 item" }).click();
-  await expect(importer.getByRole("status")).toHaveText("Imported 1 item, 2 skipped");
   await importer.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("list", { name: "Allergens in Plain" }).getByRole("listitem")).toHaveText(["No listed allergens"]);
 });
@@ -114,11 +99,10 @@ test("@saas CSV sold_out: blank means available, and yes/no/true/false are accep
       ].join("\n"),
     ),
   );
-  await expect(importer.getByTestId("csv-invalid")).toHaveCount(1);
-  await expect(importer.getByTestId("csv-invalid")).toContainText('Unknown sold_out value "maybe": use yes/no, y/n, true/false, 1/0 or sold out/available');
-  await importer.getByRole("button", { name: "Import 5 items" }).click();
+  await expect(importer.getByTestId("csv-warning")).toContainText('Unknown sold_out value "maybe": set to available');
+  await importer.getByRole("button", { name: "Import 6 items" }).click();
   await importer.getByRole("button", { name: "Done" }).click();
-  const expected = { Blank: "false", "Said yes": "true", "Said no": "false", "Said true": "true", "Said false": "false" };
+  const expected = { Blank: "false", "Said yes": "true", "Said no": "false", "Said true": "true", "Said false": "false", "Said maybe": "false" };
   for (const [name, soldOut] of Object.entries(expected)) {
     await expect(page.getByRole("switch", { name: `${name} sold out` }), name).toHaveAttribute("aria-checked", soldOut);
   }
@@ -139,14 +123,6 @@ test("@saas CSV sold_out: updating with no value keeps the toggle, a value chang
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await update("On tap,Cedar IPA,,9.50,alcohol,no,wheat");
   await expect(toggle).toHaveAttribute("aria-checked", "false");
-});
-
-test("@saas CSV allergens: a file without the column is rejected", async ({ page }) => {
-  const importer = await openImporter(page);
-  await importer.getByLabel("Choose CSV file").setInputFiles(
-    csvFile("category,name,price,tax_type\nMains,Plain,1.00,food\n"),
-  );
-  await expect(importer.getByText("This file is missing a column: allergens.")).toBeVisible();
 });
 
 test("@saas CSV duplicates: skip keeps the item, update changes it and keeps options", async ({ page }) => {
@@ -178,12 +154,22 @@ test("@saas CSV duplicates: skip keeps the item, update changes it and keeps opt
   await expect(page.getByRole("list", { name: "Allergens in Harbour Lager" }).getByRole("listitem")).toHaveText(["Milk"]);
 });
 
-test("@saas CSV: the same item twice in one file is flagged", async ({ page }) => {
-  const importer = await openImporter(page);
-  await importer.getByLabel("Choose CSV file").setInputFiles(
-    csvFile(`${HEADER}\nMains,Burger,,10.00,food,,none\nmains,burger,,12.00,food,,none\n`),
-  );
-  await expect(importer.getByTestId("csv-invalid")).toContainText("Same category and name as an earlier row");
+test("@saas CSV: the same item twice in one file asks skip or update", async ({ page }) => {
+  const twice = `${HEADER}\nMains,Burger,,10.00,food,,none\nmains,burger,,12.00,food,,none\n`;
+  let importer = await openImporter(page);
+  await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(twice));
+  await importer.getByLabel("Skip them").check();
+  await importer.getByRole("button", { name: "Import 2 items" }).click();
+  await expect(importer.getByRole("status")).toHaveText("Imported 1 item, 1 skipped");
+  await importer.getByRole("button", { name: "Done" }).click();
+  await expect(category(page, "Mains").getByText("$10.00")).toBeVisible();
+
+  importer = await openImporter(page);
+  await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(twice));
+  await importer.getByLabel("Update them").check();
+  await importer.getByRole("button", { name: "Import 2 items" }).click();
+  await importer.getByRole("button", { name: "Done" }).click();
+  await expect(category(page, "Mains").getByText("$12.00")).toBeVisible();
 });
 
 test("@saas CSV: non-CSV and oversized files are rejected", async ({ page }) => {

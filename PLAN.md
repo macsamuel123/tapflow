@@ -164,7 +164,7 @@ Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `
 
 **Owner onboarding.** A first sign-in with no membership shows a "Create venue" form. The seed creates a demo owner and fulfillment user.
 
-**CSV import.** Columns: `category,name,description,price,tax_type,allergens`, plus an optional `sold_out` (`yes/no`, `y/n`, `true/false`, `1/0` or `sold out/available`, in any case), which isn't in the template because owners use the toggle after import. New items default to available, and a blank value leaves an existing item's status alone. `price` is in dollars and is converted to integer cents, `tax_type` is `food` or `alcohol`, and `allergens` is required, separated by pipes or commas, with `none` for no listed allergens. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
+**CSV import.** Permissive: only a missing name, or a negative or unreadable price, rejects a row. Everything else imports, with a yellow warning for anything assumed. Columns: `name` and `price` are required, plus `category` (blank goes to Uncategorised), `description`, `tax_type` (blank or unknown means Food, with a note on the item), `sold_out` and `allergens`. Allergens are separated by pipes or commas, with `none` for no listed allergens. Synonyms map to the checklist: dairy and lactose to milk, nuts to tree nuts, shellfish to both crustacean shellfish and molluscs. Unknown words stay as a free-text note. A blank value imports as "allergens not declared": guests see "Ask staff about allergens", and the Menu page lists these items for quick editing. The template omits `sold_out`. It sits behind a `MenuImporter` interface (vision import later). Options and photos are edited in the UI. `ingredients` and `dietary_tags` are still deferred.
 
 ## 5. Deviations and gaps vs the BRD
 
@@ -334,8 +334,8 @@ Comes after M3 and M4. Only platform admins (§3) can open `/admin`. Pages read 
 **To carry into the real menu (M4):**
 - Option groups already follow the database: maximum picks 1 to 20, required means minimum of at least 1, optional means a minimum of 0, and option prices can't be negative.
 - The price limit of 10,000.00 and the 300-character description limit are UI rules. The API needs to enforce them too, because the database doesn't.
-- Allergens are on the item form, the item card and the CSV, and the mock stores the database codes (`menu_items.allergens`). Owners must declare them: tick allergens or "No listed allergens", and use `none` in the CSV. A blank or missing value is rejected.
-- `menu_items.allergens` defaults to `{}`, so the database can't tell "none" from "not answered". The real API must require the choice, and M4 should add a way to record it, such as a `allergens_declared` column.
+- Allergens are on the item form, the item card and the CSV, and the mock stores the database codes (`menu_items.allergens`). The item form and sign-up step 5 require an explicit choice. A CSV may leave them blank, which is stored as not declared.
+- `menu_items.allergens` defaults to `{}`, so the database can't tell "none" from "not declared". M4 must add `allergens_declared` and `other_allergens` columns, and a tax note, to match the mock.
 - `ingredients` and `dietary_tags` are still deferred.
 
 **S0.2 guest experience** (mock only). In demo mode `/v/{slug}/p/{id}?token=` redirects to `/demo/v/...`, and no `/v` page changes. Demo Brewery and Demo Food Truck have fixed slugs, touchpoint ids and `demo` tokens, and their menus load from code, so a printed demo QR works in any browser. The tester's own venue stays in one browser. Cross-device tracking waits for Supabase Realtime: the demo updates within one browser, and a "simulate" toggle stands in for staff.

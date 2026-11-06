@@ -28,6 +28,8 @@ export type MenuItem = {
   image_url: string | null;
   ingredients: string[];
   allergens: string[];
+  /** Demo only: shown instead of an allergen list when the venue hasn't declared them. */
+  allergen_note?: string;
   dietary_tags: string[];
   in_stock: boolean;
   tax_category: TaxCategory;

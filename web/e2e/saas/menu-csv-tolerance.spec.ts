@@ -72,18 +72,18 @@ test("@saas CSV sold_out: whitespace and stray quotes are trimmed", async ({ pag
   for (const [i, [, soldOut]] of noisy.entries()) await expectSoldOut(page, `Noisy ${i}`, soldOut);
 });
 
-test("@saas CSV sold_out: anything else stays invalid, with the reason", async ({ page }) => {
+test("@saas CSV sold_out: anything else imports as available, with a warning", async ({ page }) => {
   const bad = ["maybe", "2", "yep", "out", "sold", "n/a"];
   const rows = bad.map((value, i) => `Tolerance,Bad ${i},,1.00,food,${value},none`);
   const importer = await previewFile(page, csvFile([HEADER, ...rows].join("\n")));
-  const invalid = importer.getByTestId("csv-invalid");
-  await expect(invalid).toHaveCount(bad.length);
+  const warnings = importer.getByTestId("csv-warning");
+  await expect(warnings).toHaveCount(bad.length);
   for (const [i, value] of bad.entries()) {
-    await expect(invalid.nth(i)).toContainText(
-      `Unknown sold_out value "${value}": use yes/no, y/n, true/false, 1/0 or sold out/available`,
-    );
+    await expect(warnings.nth(i)).toContainText(`Unknown sold_out value "${value}": set to available`);
   }
-  await expect(importer.getByRole("button", { name: /^Import/ })).toBeDisabled();
+  await importer.getByRole("button", { name: "Import 6 items" }).click();
+  await importer.getByRole("button", { name: "Done" }).click();
+  await expectSoldOut(page, "Bad 0", false);
 });
 
 test("@saas CSV: a 20-row Google Sheets export with TRUE/FALSE imports", async ({ page }) => {
@@ -143,31 +143,15 @@ test("@saas CSV allergens: an unquoted comma in a last column still works", asyn
   await expect(allergenTags(page, "Unquoted")).toHaveText(["Milk", "Wheat/gluten", "Soy"]);
 });
 
-test("@saas CSV allergens: blank, unknown and contradictory values stay invalid", async ({ page }) => {
-  const importer = await previewFile(
-    page,
-    csvFile(
-      [
-        HEADER,
-        "Tolerance,Blank,,1.00,food,no,",
-        'Tolerance,Spaces,,1.00,food,no,"   "',
-        "Tolerance,Quotes,,1.00,food,no,''",
-        'Tolerance,Unknown,,1.00,food,no,"milk, kiwi"',
-        'Tolerance,Mixed,,1.00,food,no,"milk, none"',
-      ].join("\n"),
-    ),
-  );
-  const invalid = importer.getByTestId("csv-invalid");
-  await expect(invalid).toHaveCount(5);
-  for (const i of [0, 1, 2]) await expect(invalid.nth(i)).toContainText("allergens required — use none if none");
-  await expect(invalid.nth(3)).toContainText("Unknown allergen: kiwi");
-  await expect(invalid.nth(4)).toContainText("none can't be combined with allergens");
+test("@saas CSV allergens: a stated allergen beats none", async ({ page }) => {
+  await importAll(page, `${HEADER}\nTolerance,Mixed,,1.00,food,no,"milk, none"\n`, 1);
+  await expect(allergenTags(page, "Mixed")).toHaveText(["Milk"]);
 });
 
-test("@saas CSV: a comma outside the last column is still flagged", async ({ page }) => {
+test("@saas CSV: a stray comma that shifts the price is rejected, not guessed at", async ({ page }) => {
   const importer = await previewFile(
     page,
     csvFile("category,name,allergens,price,tax_type\nMains,Shifted,milk,wheat,1.00,food\n"),
   );
-  await expect(importer.getByTestId("csv-invalid")).toContainText("Too many columns");
+  await expect(importer.getByTestId("csv-invalid")).toContainText("Bad price");
 });

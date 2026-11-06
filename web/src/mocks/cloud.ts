@@ -182,7 +182,7 @@ export function cloudServices(mock: Services): Services {
       },
       ...guarded(menu, [
         "clearSample", "addCategory", "renameCategory", "reorderCategories", "deleteCategory",
-        "addItem", "updateItem", "deleteItem", "setPhoto", "removePhoto", "importRows",
+        "addItem", "updateItem", "deleteItem", "setAllergens", "setPhoto", "removePhoto", "importRows",
       ]),
     },
     touchpoints: {

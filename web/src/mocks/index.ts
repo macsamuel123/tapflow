@@ -339,7 +339,14 @@ export const mockServices: Services = {
       updateActive((workspace) => {
         requireUniqueItem(workspace, input.category, input.name, null);
         const { category, ...fields } = input;
-        ensureCategory(workspace.menu, category).items.push({ ...fields, id, photoUrl: null, sampleAllergens: false });
+        ensureCategory(workspace.menu, category).items.push({
+          ...fields,
+          id,
+          photoUrl: null,
+          sampleAllergens: false,
+          allergensDeclared: true,
+          taxNote: null,
+        });
       });
       return id;
     },
@@ -351,11 +358,12 @@ export const mockServices: Services = {
         const item = source?.items.find((i) => i.id === id);
         if (!source || !item) throw new ServiceError("That item no longer exists.");
         const sameAllergens =
+          item.otherAllergens === fields.otherAllergens &&
           item.allergens.length === fields.allergens.length &&
           item.allergens.every((a) => fields.allergens.includes(a));
         // Saving another field isn't a declaration: the sample allergens stay marked as sample.
         if (!sameAllergens) item.sampleAllergens = false;
-        Object.assign(item, fields);
+        Object.assign(item, fields, { allergensDeclared: true, taxNote: null });
         const target = ensureCategory(workspace.menu, category);
         if (target !== source) {
           source.items = source.items.filter((i) => i.id !== id);
@@ -377,6 +385,18 @@ export const mockServices: Services = {
         const item = findItem(workspace, itemId);
         if (!item) throw new ServiceError("That item no longer exists.");
         item.inStock = inStock;
+      });
+    },
+    async setAllergens(itemId, allergens, otherAllergens) {
+      updateActive((workspace) => {
+        const item = findItem(workspace, itemId);
+        if (!item) throw new ServiceError("That item no longer exists.");
+        Object.assign(item, {
+          allergens,
+          otherAllergens: otherAllergens.trim(),
+          allergensDeclared: true,
+          sampleAllergens: false,
+        });
       });
     },
     async setPhoto(itemId, photo) {

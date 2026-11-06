@@ -4,10 +4,11 @@ import { useMemo, useState, type DragEvent, type FormEvent } from "react";
 import { useDashboard, useDashboardReload } from "@/components/dashboard/DashboardContext";
 import { CsvImporter } from "@/components/menu-builder/CsvImporter";
 import { ItemEditor } from "@/components/menu-builder/ItemEditor";
+import { QuickAllergens } from "@/components/menu-builder/QuickAllergens";
 import { ConfirmDialog, Sheet } from "@/components/menu-builder/Sheet";
 import { Button, Card, FormError, LinkButton, Pill, TextField } from "@/components/ui";
 import { READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
-import { allergenLabel, NO_ALLERGENS_LABEL, SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
+import { allergenLabel, NO_ALLERGENS_LABEL, NOT_DECLARED_LABEL, SAMPLE_ALLERGENS_NOTE } from "@/lib/menu/allergens";
 import { categoryNameError, menuKey } from "@/lib/menu/rules";
 import { formatCents } from "@/lib/money";
 import { useData } from "@/lib/use-data";
@@ -62,8 +63,13 @@ function ItemCard({
           {item.allergens.map((allergen) => (
             <li key={allergen}><Pill tone="amber">{allergenLabel(allergen)}</Pill></li>
           ))}
-          {item.allergens.length === 0 ? <li><Pill>{NO_ALLERGENS_LABEL}</Pill></li> : null}
+          {item.otherAllergens ? <li><Pill tone="amber">Other: {item.otherAllergens}</Pill></li> : null}
+          {!item.allergensDeclared ? <li><Pill tone="red">{NOT_DECLARED_LABEL}</Pill></li> : null}
+          {item.allergensDeclared && item.allergens.length === 0 && !item.otherAllergens ? (
+            <li><Pill>{NO_ALLERGENS_LABEL}</Pill></li>
+          ) : null}
         </ul>
+        {item.taxNote ? <p className="mt-1 text-xs font-medium text-amber-900">{item.taxNote}</p> : null}
         {item.sampleAllergens ? <p className="mt-1 text-xs font-medium text-gray-600">{SAMPLE_ALLERGENS_NOTE}</p> : null}
       </div>
       <div className="flex shrink-0 flex-col items-center gap-1">
@@ -96,6 +102,8 @@ export default function MenuPage() {
   const [clearing, setClearing] = useState(false);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [dragId, setDragId] = useState<string | null>(null);
+  const [needsInfoOnly, setNeedsInfoOnly] = useState(false);
+  const [quickItem, setQuickItem] = useState<MenuItem | null>(null);
 
   const categories = useMemo(() => data?.categories ?? [], [data]);
   const names = categories.map((c) => c.name);
@@ -105,6 +113,7 @@ export default function MenuPage() {
     [categories],
   );
   const { menu } = getServices();
+  const undeclared = categories.flatMap((c) => c.items).filter((i) => !i.allergensDeclared);
 
   const isOpen = (category: MenuCategory, index: number) =>
     toggled[category.id] ?? (total <= EXPAND_ALL_UP_TO || index === 0);
@@ -150,6 +159,18 @@ export default function MenuPage() {
         <Button variant="secondary" onClick={() => setImporting(true)}>Upload CSV</Button>
       </div>
 
+      {undeclared.length > 0 ? (
+        <div className="space-y-2 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+          <p className="font-semibold text-ink">
+            {undeclared.length === 1 ? "1 item needs" : `${undeclared.length} items need`} allergen info
+          </p>
+          <p className="text-sm text-gray-700">Guests are told to ask staff until you add it.</p>
+          <Button variant="secondary" aria-pressed={needsInfoOnly} onClick={() => setNeedsInfoOnly((on) => !on)}>
+            {needsInfoOnly ? "Show all items" : "Show these items"}
+          </Button>
+        </div>
+      ) : null}
+
       {data?.sample ? (
         <Card className="space-y-2 bg-brand-50">
           <p className="text-sm text-ink">This is a sample menu. Start fresh when you&apos;re ready to add your own.</p>
@@ -161,7 +182,22 @@ export default function MenuPage() {
         <Card><p className="text-gray-600">No items yet. Add one, or upload a CSV.</p></Card>
       ) : null}
 
-      {categories.map((category, index) => {
+      {needsInfoOnly && undeclared.length > 0 ? (
+        <ul aria-label="Items that need allergen info" className="space-y-2">
+          {undeclared.map((item) => (
+            <li key={item.id}>
+              <Card className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-semibold text-ink">{item.name}</span>
+                <Button variant="secondary" aria-label={`Set allergens for ${item.name}`} onClick={() => setQuickItem(item)}>
+                  Set allergens
+                </Button>
+              </Card>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {(needsInfoOnly && undeclared.length > 0 ? [] : categories).map((category, index) => {
         const open = isOpen(category, index);
         return (
           <section
@@ -253,6 +289,17 @@ export default function MenuPage() {
             <FormError message={error} />
           </form>
         </Sheet>
+      ) : null}
+
+      {quickItem ? (
+        <QuickAllergens
+          item={quickItem}
+          onClose={() => setQuickItem(null)}
+          onSaved={() => {
+            setQuickItem(null);
+            void reload();
+          }}
+        />
       ) : null}
 
       {importing ? (

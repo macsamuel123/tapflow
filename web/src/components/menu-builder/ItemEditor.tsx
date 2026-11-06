@@ -52,7 +52,10 @@ export function ItemEditor({
   const [taxCategory, setTaxCategory] = useState<TaxCategory>(item?.taxCategory ?? "Food");
   const [soldOut, setSoldOut] = useState(item ? !item.inStock : false);
   const [allergens, setAllergens] = useState<AllergenId[]>(item?.allergens ?? []);
-  const [noAllergens, setNoAllergens] = useState(item ? item.allergens.length === 0 : false);
+  const [noAllergens, setNoAllergens] = useState(
+    item ? item.allergensDeclared && item.allergens.length === 0 && !item.otherAllergens : false,
+  );
+  const [otherAllergens, setOtherAllergens] = useState(item?.otherAllergens ?? "");
   const [groups, setGroups] = useState(() => toGroupForm(item));
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [photoRemoved, setPhotoRemoved] = useState(false);
@@ -73,7 +76,7 @@ export function ItemEditor({
     description: descriptionError(description),
     price: priceError(price),
     category: categoryNameError(category),
-    allergens: allergenChoiceError(allergens, noAllergens),
+    allergens: otherAllergens.trim() ? undefined : allergenChoiceError(allergens, noAllergens),
   };
   const valid = !Object.values(errors).some(Boolean) && !groups.some((g) => optionGroupError(g));
 
@@ -105,6 +108,7 @@ export function ItemEditor({
       taxCategory,
       inStock: !soldOut,
       allergens,
+      otherAllergens: otherAllergens.trim(),
       optionGroups: groups.map(toOptionGroup),
     };
     try {
@@ -150,6 +154,9 @@ export function ItemEditor({
           />
           <TextField label="Price" inputMode="decimal" placeholder="12.50" value={price} error={attempted ? errors.price : undefined} onChange={(e) => setPrice(e.target.value)} />
           <CategoryField categories={categories} value={category} error={attempted ? errors.category : undefined} onChange={(e) => setCategory(e.target.value)} />
+          {item?.taxNote ? (
+            <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-ink">{item.taxNote}. Saving confirms the tax type below.</p>
+          ) : null}
           <SelectField label="Tax type" value={taxCategory} onChange={(e) => setTaxCategory(e.target.value as TaxCategory)}>
             <option value="Food">Food (GST)</option>
             <option value="Alcohol">Alcohol (GST + PST)</option>
@@ -203,6 +210,16 @@ export function ItemEditor({
             onChange={(next) => {
               setAllergens(next.allergens);
               setNoAllergens(next.noAllergens);
+              if (next.noAllergens) setOtherAllergens("");
+            }}
+          />
+          <TextField
+            label="Other allergens"
+            maxLength={120}
+            value={otherAllergens}
+            onChange={(e) => {
+              setOtherAllergens(e.target.value);
+              if (e.target.value.trim()) setNoAllergens(false);
             }}
           />
 

@@ -20,16 +20,25 @@ function RowCard({ row, currency }: { row: PreviewRow; currency: string }) {
       </li>
     );
   }
+  const warned = row.warnings.length > 0;
   return (
-    <li data-testid="csv-valid" className="rounded-xl border border-gray-200 p-3 text-sm">
+    <li
+      data-testid={warned ? "csv-warning" : "csv-valid"}
+      className={`rounded-xl border p-3 text-sm ${warned ? "border-amber-300 bg-amber-50" : "border-gray-200"}`}
+    >
       <p className="flex justify-between gap-2 font-semibold text-ink">
         <span className="min-w-0 truncate">{name}</span>
         <span className="tabular-nums">{row.row ? formatCents(row.row.priceCents, currency) : ""}</span>
       </p>
       <p className="text-gray-600">
-        {row.row?.category} · {row.row?.taxCategory}
+        {row.row?.category} · {row.row?.taxCategory ?? "Food"}
         {row.duplicate ? <> · <Pill tone="amber">Already on menu</Pill></> : null}
       </p>
+      {warned ? (
+        <ul className="mt-1 list-inside list-disc text-amber-900">
+          {row.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+        </ul>
+      ) : null}
     </li>
   );
 }
@@ -53,7 +62,9 @@ export function CsvImporter({
   const invalid = useMemo(() => rows?.filter((r) => r.reason) ?? [], [rows]);
   const valid = useMemo(() => rows?.filter((r) => r.row) ?? [], [rows]);
   const duplicates = valid.filter((r) => r.duplicate);
-  const ordered = [...invalid, ...valid];
+  const warned = valid.filter((r) => r.warnings.length > 0);
+  const ordered = [...invalid, ...warned, ...valid.filter((r) => r.warnings.length === 0)];
+  const undeclared = valid.filter((r) => r.row?.allergens === null).length;
 
   async function choose(file: File | undefined) {
     if (!file) return;
@@ -89,6 +100,11 @@ export function CsvImporter({
     return (
       <Sheet title="Import finished" onClose={onClose} footer={<Button className="flex-1" onClick={onClose}>Done</Button>}>
         <p role="status" className="font-semibold text-ink">{parts.join(", ")}</p>
+        {undeclared > 0 ? (
+          <p className="mt-2 text-sm text-gray-600">
+            {undeclared === 1 ? "1 item needs" : `${undeclared} items need`} allergen info. Guests are told to ask staff until you add it.
+          </p>
+        ) : null}
         {result.skipped > 0 ? (
           <Button variant="secondary" className="mt-4" onClick={() => void downloadSkipped()}>Download skipped rows</Button>
         ) : null}
@@ -113,8 +129,8 @@ export function CsvImporter({
         {rows ? null : (
           <>
             <p className="text-gray-600">
-              Columns: category, name, description, price, tax_type, allergens. Add options and photos
-              afterwards, and mark items sold out with the toggle. Up to 1,000 rows and 1 MB.
+              Only name and price are required. Also read: category, description, tax_type, allergens. Add
+              options and photos afterwards, and mark items sold out with the toggle. Up to 1,000 rows and 1 MB.
             </p>
             <Button variant="secondary" onClick={() => downloadText(TEMPLATE_NAME, TEMPLATE_CSV)}>Download template</Button>
           </>
@@ -136,7 +152,7 @@ export function CsvImporter({
         {rows ? (
           <>
             <p role="status" className="font-semibold text-ink">
-              {valid.length} ready to import, {invalid.length} with problems
+              {valid.length} ready to import, {warned.length} with warnings, {invalid.length} rejected
             </p>
             {duplicates.length > 0 ? (
               <fieldset className="rounded-xl border border-amber-300 bg-amber-50 p-3">

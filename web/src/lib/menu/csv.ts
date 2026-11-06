@@ -1,14 +1,15 @@
-import type { AllergenId, MenuImportRow, TaxCategory } from "@/services/types";
-import { allergenFromCsv } from "./allergens";
-import { parseDollars } from "./price";
-import { descriptionError, itemNameError, categoryNameError, menuKey } from "./rules";
+import type { AllergenId, MenuImportRow } from "@/services/types";
+import { allergenLabel, allergensFromCsv, NOT_DECLARED_LABEL } from "./allergens";
+import { MAX_PRICE_CENTS, parseImportPrice } from "./price";
+import { MAX_CATEGORY_NAME, MAX_DESCRIPTION, MAX_ITEM_NAME, menuKey } from "./rules";
 
 export const MAX_CSV_BYTES = 1_000_000;
 export const MAX_CSV_ROWS = 1_000;
 export const TEMPLATE_NAME = "tapflow-menu-template.csv";
 
 const COLUMNS = ["category", "name", "description", "price", "tax_type", "sold_out", "allergens"];
-const REQUIRED_COLUMNS = ["category", "name", "price", "tax_type", "allergens"];
+const REQUIRED_COLUMNS = ["name", "price"];
+export const UNCATEGORISED = "Uncategorised";
 const NOT_CSV = "That doesn't look like a CSV file. Choose a .csv file.";
 const SOLD_OUT_HELP = "yes/no, y/n, true/false, 1/0 or sold out/available";
 
@@ -23,18 +24,16 @@ export const TEMPLATE_CSV = [
 export type PreviewRow = {
   line: number;
   raw: Record<string, string>;
+  /** Null when the row is rejected. */
   row: MenuImportRow | null;
+  /** Why it was rejected. Only a missing name or an unreadable price. */
   reason: string | null;
+  /** What was assumed or changed. The row still imports. */
+  warnings: string[];
   duplicate: boolean;
 };
 
 export type CsvPreview = { error: string; rows?: undefined } | { error?: undefined; rows: PreviewRow[] };
-
-function parseTax(value: string): TaxCategory | null {
-  const tax = value.trim().toLowerCase();
-  if (tax === "food") return "Food";
-  return tax === "alcohol" ? "Alcohol" : null;
-}
 
 // Spreadsheets add spaces, and quotes survive some exports, so these two columns are forgiving.
 const EDGE_NOISE = /^[\s"'`“”‘’]+|[\s"'`“”‘’]+$/g;
@@ -52,53 +51,88 @@ function parseSoldOut(value: string): boolean | null | "bad" {
   return AVAILABLE_VALUES.has(text) ? false : "bad";
 }
 
-function parseAllergens(value: string): { ids: AllergenId[]; problem: string | null } {
+function parseAllergens(value: string) {
   const parts = value.split(/[|,]/).map(cleanValue).filter(Boolean);
-  if (parts.length === 0) return { ids: [], problem: "allergens required — use none if none" };
-  if (parts.includes("none")) {
-    return { ids: [], problem: parts.length > 1 ? "none can't be combined with allergens" : null };
+  const warnings: string[] = [];
+  if (parts.length === 0) {
+    warnings.push(NOT_DECLARED_LABEL);
+    return { ids: null, other: "", warnings };
   }
-  const ids = parts.map(allergenFromCsv);
-  const unknown = parts.filter((_, i) => ids[i] === null);
-  return {
-    ids: [...new Set(ids.filter((id): id is AllergenId => id !== null))],
-    problem: unknown.length ? `Unknown allergen: ${unknown.join(", ")}` : null,
-  };
+  const ids = new Set<AllergenId>();
+  const other: string[] = [];
+  for (const part of parts) {
+    if (part === "none") continue;
+    const known = allergensFromCsv(part);
+    if (!known) {
+      other.push(part);
+      continue;
+    }
+    known.ids.forEach((id) => ids.add(id));
+    if (known.synonym) warnings.push(`${part} read as ${known.ids.map(allergenLabel).join(" and ")}`);
+  }
+  if (other.length) warnings.push(`Kept as a note: ${other.join(", ")}`);
+  // A stated allergen always beats "none".
+  if (parts.includes("none") && parts.length > 1) warnings.push("Ignored none, because allergens are listed");
+  return { ids: [...ids], other: other.join(", "), warnings };
 }
 
-function checkRow(raw: Record<string, string>, extraColumns: boolean) {
-  const get = (column: string) => raw[column] ?? "";
-  const reasons: string[] = [];
-  if (extraColumns) reasons.push("Too many columns (check for an unquoted comma)");
-  if (!get("category").trim()) reasons.push("Missing category");
-  else if (categoryNameError(get("category"))) reasons.push("Category name too long");
-  if (!get("name").trim()) reasons.push("Missing name");
-  else if (itemNameError(get("name"))) reasons.push("Name too long (80 characters max)");
-  if (descriptionError(get("description"))) reasons.push("Description too long (300 characters max)");
-  const priceCents = parseDollars(get("price"));
-  if (priceCents === null) reasons.push("Bad price");
-  const taxCategory = parseTax(get("tax_type"));
-  if (!taxCategory) reasons.push("Unknown tax_type");
-  const soldOut = parseSoldOut(get("sold_out"));
-  if (soldOut === "bad") {
-    reasons.push(`Unknown sold_out value "${get("sold_out").trim().slice(0, 30)}": use ${SOLD_OUT_HELP}`);
-  }
-  const allergens = parseAllergens(get("allergens"));
-  if (allergens.problem) reasons.push(allergens.problem);
+function clip(value: string, max: number, label: string, warnings: string[]): string {
+  if (value.length <= max) return value;
+  warnings.push(`${label} shortened to ${max} characters`);
+  return value.slice(0, max).trimEnd();
+}
 
-  if (reasons.length || priceCents === null || !taxCategory || soldOut === "bad") {
-    return { row: null, reason: reasons.join("; ") };
+/** An unquoted 1,200.50 splits into "1" and "200.50". Importing that as $1.00 would be far worse
+ *  than rejecting it, so a row with extra cells and 3 digits after the price is unreadable. */
+function priceWasSplit(cellAfterPrice: string | undefined, hasExtraCells: boolean): boolean {
+  return hasExtraCells && /^\d{3}(\.\d{1,2})?$/.test(cellAfterPrice?.trim() ?? "");
+}
+
+function checkRow(raw: Record<string, string>, extraColumns: boolean, splitPrice: boolean) {
+  const get = (column: string) => raw[column] ?? "";
+  const name = get("name").trim();
+  const priceCents = splitPrice ? null : parseImportPrice(get("price"));
+  const reasons = [
+    ...(name ? [] : ["Missing name"]),
+    ...(splitPrice ? ["Bad price: put quotes around prices with commas"] : priceCents === null ? ["Bad price"] : []),
+  ];
+  if (reasons.length || priceCents === null) return { row: null, reason: reasons.join("; "), warnings: [] };
+
+  const warnings: string[] = [];
+  if (priceCents > MAX_PRICE_CENTS) warnings.push("Price is over $10,000.00: check it");
+  if (extraColumns) warnings.push("Extra columns ignored");
+
+  let category = get("category").trim();
+  if (!category) {
+    category = UNCATEGORISED;
+    warnings.push(`Category blank: put in ${UNCATEGORISED}`);
   }
+
+  const taxText = cleanValue(get("tax_type"));
+  const taxCategory = taxText === "food" ? "Food" : taxText === "alcohol" ? "Alcohol" : null;
+  if (!taxCategory) {
+    warnings.push(taxText ? `Unknown tax_type "${taxText.slice(0, 30)}": set to Food` : "Tax type blank: set to Food");
+  }
+
+  const parsedSoldOut = parseSoldOut(get("sold_out"));
+  if (parsedSoldOut === "bad") {
+    warnings.push(`Unknown sold_out value "${get("sold_out").trim().slice(0, 30)}": set to available (use ${SOLD_OUT_HELP})`);
+  }
+
+  const allergens = parseAllergens(get("allergens"));
+  warnings.push(...allergens.warnings);
+
   const row: MenuImportRow = {
-    category: get("category").trim(),
-    name: get("name").trim(),
+    category: clip(category, MAX_CATEGORY_NAME, "Category", warnings),
+    name: clip(name, MAX_ITEM_NAME, "Name", warnings),
     priceCents,
     taxCategory,
-    description: get("description").trim() || null,
-    soldOut,
+    description: clip(get("description").trim(), MAX_DESCRIPTION, "Description", warnings) || null,
+    soldOut: parsedSoldOut === "bad" ? null : parsedSoldOut,
     allergens: allergens.ids,
+    otherAllergens: allergens.other,
   };
-  return { row, reason: null };
+  return { row, reason: null, warnings };
 }
 
 /** Rejects by name and size before reading, then by content in parseMenuCsv. */
@@ -125,27 +159,24 @@ export async function parseMenuCsv(text: string, existingKeys: ReadonlySet<strin
     return { error: `This file has ${parsed.data.length} rows. The limit is ${MAX_CSV_ROWS}.` };
   }
 
-  const seen = new Set<string>();
+  // A repeat of an earlier row in the file is a duplicate like any other: the owner chooses.
+  const seen = new Set<string>(existingKeys);
   const rows = parsed.data.map((record, i): PreviewRow => {
     const { __parsed_extra: rawExtra, ...raw } = record as Record<string, string> & { __parsed_extra?: string[] };
     const extra = (rawExtra ?? []).filter((cell) => cell.trim());
     // An unquoted "milk, wheat" in a last allergens column spills into extra cells.
     const spilled = extra.length > 0 && headers.at(-1) === "allergens";
+    const cellAfterPrice = raw[headers[headers.indexOf("price") + 1] ?? ""];
+    const splitPrice = priceWasSplit(cellAfterPrice, extra.length > 0);
     if (spilled) raw.allergens = [raw.allergens ?? "", ...extra].join(",");
-    const checked = checkRow(raw, extra.length > 0 && !spilled);
-    let { row, reason } = checked;
+    const { row, reason, warnings } = checkRow(raw, extra.length > 0 && !spilled, splitPrice);
     let duplicate = false;
     if (row) {
       const key = menuKey(row.category, row.name);
-      if (seen.has(key)) {
-        reason = "Same category and name as an earlier row";
-        row = null;
-      } else {
-        seen.add(key);
-        duplicate = existingKeys.has(key);
-      }
+      duplicate = seen.has(key);
+      seen.add(key);
     }
-    return { line: i + 2, raw, row, reason, duplicate };
+    return { line: i + 2, raw, row, reason, warnings, duplicate };
   });
   return { rows };
 }

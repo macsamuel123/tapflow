@@ -28,7 +28,27 @@ export function allergenLabel(id: AllergenId): string {
   return ALLERGENS.find((a) => a.id === id)?.label ?? id;
 }
 
-export function allergenFromCsv(value: string): AllergenId | null {
+/** Everyday words that map to the checklist. "shellfish" covers both shellfish groups. */
+const SYNONYMS: Record<string, AllergenId[]> = {
+  dairy: ["milk"],
+  lactose: ["milk"],
+  nuts: ["tree_nut"],
+  nut: ["tree_nut"],
+  shellfish: ["crustacean", "shellfish"],
+  soya: ["soy"],
+  soybean: ["soy"],
+  soybeans: ["soy"],
+  "sesame seeds": ["sesame"],
+};
+
+export const ASK_STAFF_NOTE = "Ask staff about allergens";
+export const NOT_DECLARED_LABEL = "Allergens not declared";
+
+/** The allergens a CSV word means, and whether it was a synonym. Null: an unknown word. */
+export function allergensFromCsv(value: string): { ids: AllergenId[]; synonym: boolean } | null {
   const wanted = value.trim().toLowerCase();
-  return ALLERGENS.find((a) => a.csv.includes(wanted))?.id ?? null;
+  const exact = ALLERGENS.find((a) => a.csv.includes(wanted));
+  if (exact) return { ids: [exact.id], synonym: false };
+  const mapped = SYNONYMS[wanted];
+  return mapped ? { ids: mapped, synonym: true } : null;
 }

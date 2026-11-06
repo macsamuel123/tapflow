@@ -147,9 +147,13 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
                   <span className={`min-w-0 flex-1 ${item.in_stock ? "" : "text-gray-400"}`}>
                     <span className="block font-medium">{item.name}</span>
                     {item.description ? <span className="mt-0.5 block text-sm text-gray-600">{item.description}</span> : null}
-                    <span className="mt-1 block text-xs text-gray-600">
-                      {item.allergens.length ? `Contains: ${item.allergens.join(", ")}` : "No listed allergens"}
-                    </span>
+                    {item.allergen_note ? (
+                      <span className="mt-1 block text-sm font-semibold text-amber-800">{item.allergen_note}</span>
+                    ) : (
+                      <span className="mt-1 block text-xs text-gray-600">
+                        {item.allergens.length ? `Contains: ${item.allergens.join(", ")}` : "No listed allergens"}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block tabular-nums">{formatCents(item.price_cents, currency)}</span>
@@ -177,7 +181,12 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
 
       {openItem ? (
         <ModifierSheet
-          item={openItem}
+          // The shared sheet has no allergen note, so it travels in the description.
+          item={
+            openItem.allergen_note
+              ? { ...openItem, description: `${openItem.description} ${openItem.allergen_note}.`.trim() }
+              : openItem
+          }
           currency={currency}
           onClose={() => setOpenItem(null)}
           onAdd={(ids, qty, notes) => add(openItem, ids, qty, notes)}

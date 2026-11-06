@@ -111,8 +111,14 @@ export type MenuItem = {
   priceCents: number;
   taxCategory: TaxCategory;
   inStock: boolean;
-  /** Empty means the owner declared none. Every form and import requires a choice. */
+  /** With allergensDeclared, an empty list means the owner said there are none. */
   allergens: AllergenId[];
+  /** False for an import with no allergen information: guests are told to ask staff. */
+  allergensDeclared: boolean;
+  /** Free text from an import that matched no known allergen. */
+  otherAllergens: string;
+  /** Set when an import had to assume the tax type. Cleared once the owner saves the item. */
+  taxNote: string | null;
   /** Allergens were written by us, not declared by the owner. Cleared once the owner changes them. */
   sampleAllergens: boolean;
   optionGroups: OptionGroup[];
@@ -122,18 +128,21 @@ export type MenuItem = {
 export type MenuCategory = { id: string; name: string; items: MenuItem[] };
 
 /** What a form saves. `category` is a name: a new name creates the category. */
-export type MenuItemInput = Omit<MenuItem, "id" | "photoUrl" | "sampleAllergens"> & { category: string };
+export type MenuItemInput = Omit<MenuItem, "id" | "photoUrl" | "sampleAllergens" | "allergensDeclared" | "taxNote"> & {
+  category: string;
+};
 
-/** One imported item. Null keeps the current value when a duplicate is updated. */
+/** One imported item. Null keeps the current value when a duplicate is updated. Null allergens
+ *  on a new item means not declared, and null tax means Food, with a note on the item. */
 export type MenuImportRow = {
   category: string;
   name: string;
   priceCents: number;
-  taxCategory: TaxCategory;
+  taxCategory: TaxCategory | null;
   description: string | null;
   soldOut: boolean | null;
-  /** Always declared: an empty list means the owner chose "no listed allergens". */
-  allergens: AllergenId[];
+  allergens: AllergenId[] | null;
+  otherAllergens: string;
 };
 
 export type DuplicateMode = "skip" | "update";
@@ -216,6 +225,7 @@ export interface MenuService {
   updateItem(id: string, input: MenuItemInput): Promise<void>;
   deleteItem(id: string): Promise<void>;
   setInStock(itemId: string, inStock: boolean): Promise<void>;
+  setAllergens(itemId: string, allergens: AllergenId[], otherAllergens: string): Promise<void>;
   setPhoto(itemId: string, photo: Blob): Promise<void>;
   removePhoto(itemId: string): Promise<void>;
   importRows(rows: MenuImportRow[], onDuplicate: DuplicateMode): Promise<ImportResult>;
