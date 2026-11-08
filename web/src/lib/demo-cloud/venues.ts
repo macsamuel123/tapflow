@@ -4,11 +4,12 @@ import { createHash, randomInt } from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
 import { ALLERGENS } from "@/lib/menu/allergens";
 import { GST, PST } from "@/mocks/fixtures";
-import type { MenuCategory, MenuItem, OptionGroup, Touchpoint } from "@/services/types";
+import type { Branding, MenuCategory, MenuItem, OptionGroup, Touchpoint } from "@/services/types";
 import {
   KEY_TRIES_PER_MINUTE,
   MAX_VENUE_ITEMS,
   MAX_VENUE_TOUCHPOINTS,
+  BRANDING_BUCKET,
   PHOTO_BUCKET,
   type VenueSnapshot,
 } from "./config";
@@ -69,8 +70,8 @@ function cleanGroup(raw: Record<string, unknown>): OptionGroup | null {
   };
 }
 
-function photoPrefix(venueId: string): string {
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${PHOTO_BUCKET}/${venueId}/`;
+export function photoPrefix(venueId: string, bucket = PHOTO_BUCKET): string {
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${venueId}/`;
 }
 
 function cleanItem(raw: Record<string, unknown>, venueId: string): MenuItem | null {
@@ -163,6 +164,11 @@ async function touchpointsOf(venueId: string): Promise<Touchpoint[]> {
   }));
 }
 
+export function readBranding(raw: unknown): Branding {
+  const b = (raw ?? {}) as Partial<Branding>;
+  return { logoUrl: b.logoUrl ?? null, coverUrl: b.coverUrl ?? null, color: b.color ?? null };
+}
+
 export async function loadSnapshot(venueId: string): Promise<VenueSnapshot | null> {
   const [venue, menu] = await Promise.all([
     db().from("venues").select("*").eq("id", venueId).maybeSingle(),
@@ -172,11 +178,13 @@ export async function loadSnapshot(venueId: string): Promise<VenueSnapshot | nul
   if (!venue.data || !menu.data) return null;
   const v = venue.data;
   return {
-    venue: { id: v.id, slug: v.slug, name: v.name, industry: v.industry, venueType: null, country: v.country, region: v.region, currency: v.currency },
+    venue: { id: v.id, slug: v.slug, name: v.name, industry: v.industry, venueType: v.venue_type ?? null, country: v.country, region: v.region, currency: v.currency },
     version: v.menu_version,
     sampleMenu: v.sample_menu,
     menu: menu.data.menu as MenuCategory[],
     touchpoints: await touchpointsOf(venueId),
+    branding: readBranding(v.branding),
+    roleLabels: (v.role_labels as VenueSnapshot["roleLabels"] | null) ?? {},
   };
 }
 
@@ -220,8 +228,8 @@ export async function requireOwnerOfSlug(request: NextRequest, slug: string): Pr
   return requireOwner(request, found.data.id as string);
 }
 
-export async function removePhotos(venueId: string): Promise<void> {
-  const bucket = adminClient().storage.from(PHOTO_BUCKET);
+export async function removePhotos(venueId: string, name = PHOTO_BUCKET): Promise<void> {
+  const bucket = adminClient().storage.from(name);
   const { data } = await bucket.list(venueId, { limit: 1000 });
   if (data?.length) await bucket.remove(data.map((file) => `${venueId}/${file.name}`));
 }
@@ -229,6 +237,7 @@ export async function removePhotos(venueId: string): Promise<void> {
 /** Files first: if this fails halfway, the row survives and the next run tries again. */
 export async function deleteVenue(venueId: string, slug: string): Promise<void> {
   await removePhotos(venueId);
+  await removePhotos(venueId, BRANDING_BUCKET);
   const { error } = await db().rpc("delete_venue", { p_slug: slug });
   if (error) throw new Error("Couldn't delete the venue");
 }

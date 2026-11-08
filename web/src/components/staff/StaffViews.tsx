@@ -5,7 +5,9 @@ import { OrderCard } from "@/components/dashboard/OrderCard";
 import { Card, FormError, Pill } from "@/components/ui";
 import { can } from "@/lib/staff/permissions";
 import { useData } from "@/lib/use-data";
+import { DEMO_CLOUD } from "@/lib/demo-cloud/config";
 import { useLive } from "@/lib/use-live";
+import { useRealtime } from "@/lib/use-realtime";
 import { getServices, type Order, type StaffSession } from "@/services";
 
 type ViewProps = { slug: string; session: StaffSession };
@@ -14,6 +16,8 @@ function useOrders(slug: string, keep: (order: Order) => boolean) {
   const load = useCallback(async () => (await getServices().staffMode.orders(slug)).filter(keep), [slug, keep]);
   const result = useData(load);
   useLive(() => void result.reload());
+  // Across devices in the shared demo: a guest's order or a colleague's step shows up here.
+  useRealtime(DEMO_CLOUD ? { kind: "venue", slug } : null, () => void result.reload());
   return result;
 }
 
@@ -48,6 +52,7 @@ function OrderList({ orders, empty, session, slug, run }: {
 function SoldOut({ slug }: { slug: string }) {
   const { data, error, run, reload } = useData(useCallback(() => getServices().staffMode.menu(slug), [slug]));
   useLive(() => void reload());
+  useRealtime(DEMO_CLOUD ? { kind: "menu", slug } : null, () => void reload());
   const items = data?.flatMap((c) => c.items) ?? [];
   return (
     <details className="rounded-2xl border border-gray-200 bg-white p-4">

@@ -1,5 +1,5 @@
 import { DEMO_MODE } from "@/lib/demo";
-import type { MenuCategory, Touchpoint, Venue } from "@/services/types";
+import type { Branding, MenuCategory, RoleLabels, Touchpoint, Venue } from "@/services/types";
 
 /** The fixed demo venues share orders across devices. Off: the same-browser demo from S0.2. */
 export const DEMO_CLOUD = DEMO_MODE && process.env.NEXT_PUBLIC_DEMO_CLOUD === "true";
@@ -21,6 +21,7 @@ export const VENUES_PER_DAY = 5;
 export const KEY_TRIES_PER_MINUTE = 10;
 export const VENUE_EDITS_PER_MINUTE = 120;
 export const PHOTO_BUCKET = "demo-menu";
+export const BRANDING_BUCKET = "demo-branding";
 
 export const MAX_ORDER_LINES = 20;
 export const ORDERS_PER_MINUTE = 10;
@@ -54,4 +55,6 @@ export type VenueSnapshot = {
   sampleMenu: boolean;
   menu: MenuCategory[];
   touchpoints: Touchpoint[];
+  branding: Branding;
+  roleLabels: Partial<RoleLabels>;
 };

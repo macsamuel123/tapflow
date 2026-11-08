@@ -93,7 +93,7 @@ export async function deletePath(path: string, venueKey: string): Promise<void> 
 /** What a guest's phone can read about a tester's venue: never tokens. */
 export async function fetchPublicVenue(slug: string, touchpointId: string) {
   const db = await demo();
-  const venue = await db.from("venues").select("id, slug, name, industry, country, currency, menu_version").eq("slug", slug).maybeSingle();
+  const venue = await db.from("venues").select("id, slug, name, industry, venue_type, country, currency, menu_version, branding").eq("slug", slug).maybeSingle();
   if (venue.error) throw unavailable();
   if (!venue.data) return null;
   const venueId = venue.data.id as string;
@@ -111,6 +111,43 @@ export async function fetchVenueName(slug: string): Promise<{ name: string; curr
   const { data, error } = await (await demo()).from("venues").select("name, currency").eq("slug", slug).maybeSingle();
   if (error) throw unavailable();
   return data as { name: string; currency: string } | null;
+}
+
+/** The PIN pad's venue name and role labels. Public, like the rest of a venue's row. */
+export async function fetchStaffVenue(slug: string): Promise<{ name: string; role_labels: Record<string, string> | null } | null> {
+  const { data, error } = await (await demo()).from("venues").select("name, role_labels").eq("slug", slug).maybeSingle();
+  if (error) throw unavailable();
+  return data as { name: string; role_labels: Record<string, string> | null } | null;
+}
+
+/** For staff devices: the status code matters (401 wrong PIN, 423 locked), so nothing throws. */
+export async function staffRequest<T>(
+  path: string,
+  init: RequestInit & { token?: string | null } = {},
+): Promise<{ status: number; body: T & { error?: string } }> {
+  const { token, ...rest } = init;
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...rest,
+      headers: {
+        ...(rest.body ? { "Content-Type": "application/json" } : {}),
+        ...(token ? { "x-staff-token": token } : {}),
+      },
+    });
+  } catch {
+    throw unavailable();
+  }
+  const body = (await response.json().catch(() => ({}))) as T & { error?: string };
+  return { status: response.status, body };
+}
+
+export async function sendImage<T>(path: string, image: Blob, venueKey: string): Promise<T> {
+  return send(path, { method: "POST", body: image, headers: { "Content-Type": "image/jpeg" } }, venueKey);
+}
+
+export async function deleteJson<T>(path: string, venueKey: string): Promise<T> {
+  return send<T>(path, { method: "DELETE" }, venueKey);
 }
 
 async function send<T>(path: string, init: RequestInit, venueKey?: string): Promise<T> {
