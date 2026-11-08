@@ -172,7 +172,7 @@ export async function loadSnapshot(venueId: string): Promise<VenueSnapshot | nul
   if (!venue.data || !menu.data) return null;
   const v = venue.data;
   return {
-    venue: { id: v.id, slug: v.slug, name: v.name, industry: v.industry, country: v.country, region: v.region, currency: v.currency },
+    venue: { id: v.id, slug: v.slug, name: v.name, industry: v.industry, venueType: null, country: v.country, region: v.region, currency: v.currency },
     version: v.menu_version,
     sampleMenu: v.sample_menu,
     menu: menu.data.menu as MenuCategory[],

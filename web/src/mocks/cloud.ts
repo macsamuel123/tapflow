@@ -29,6 +29,7 @@ import type {
   Venue,
 } from "@/services/types";
 import { BREWERY_ID, demoBrewery, demoFoodTruck, FOOD_TRUCK_ID, GST, PST, workspaceFromSignUp } from "./fixtures";
+import { attachPhotos } from "./index";
 import { activeWorkspace, readState, update, type Workspace } from "./store";
 
 const FIXED_MENUS = [demoBrewery(), demoFoodTruck()];
@@ -175,6 +176,7 @@ async function loadGuestVenue(context: GuestContext): Promise<boolean> {
         slug: found.venue.slug as string,
         name: found.venue.name as string,
         industry: found.venue.industry as Venue["industry"],
+        venueType: null,
         country: found.venue.country as "CA" | "US",
         region: "",
         currency: found.venue.currency as string,
@@ -331,7 +333,7 @@ export function cloudServices(mock: Services): Services {
     },
   };
 
-  return {
+  const services: Services = {
     ...mock,
     guest: cloudGuest,
     auth: {
@@ -340,6 +342,7 @@ export function cloudServices(mock: Services): Services {
         const session: Session = { name: input.name.trim(), email: input.email.trim() };
         const draft = workspaceFromSignUp({
           industry: input.industry,
+          venueType: input.venueType,
           venueName: input.venueName.trim(),
           country: input.country,
           region: input.region,
@@ -364,6 +367,8 @@ export function cloudServices(mock: Services): Services {
           state.workspaces = [next, ...state.workspaces];
           state.activeId = id;
         });
+        // The photo route needs the recovery code, so photos go on once the venue exists.
+        await attachPhotos(active().menu, input.menuPhotos, (itemId, photo) => services.menu.setPhoto(itemId, photo));
         return session;
       },
       async openVenue(rawCode) {
@@ -499,5 +504,5 @@ export function cloudServices(mock: Services): Services {
       ),
     },
   };
+  return services;
 }
-

@@ -4,16 +4,19 @@ import { categoryNameError, sameName } from "@/lib/menu/rules";
 import { ServiceError } from "@/services/types";
 import type {
   ImportResult,
+  MenuCategory,
   MenuItem,
   ServiceSetup,
   Services,
   Session,
+  SignUpInput,
   Touchpoint,
 } from "@/services/types";
 import { allowedSteps, guestService, withPhotoUrls } from "./guest";
 import { applyImport, ensureCategory, findCategory } from "./menu-ops";
 import { clearPhotos, deletePhoto, savePhoto } from "./photos";
 import { makePickup, makeSpot, slugify, workspaceFromSignUp, YOUR_VENUE_ID } from "./fixtures";
+import { brandingService, staffModeService, staffService } from "./staff";
 import {
   activeWorkspace,
   readState,
@@ -124,6 +127,18 @@ function applyPickup(workspace: Workspace, setup: ServiceSetup): void {
   }
 }
 
+/** Sign-up photos go on after the items exist, through the same path as a dashboard upload. */
+export async function attachPhotos(
+  menu: MenuCategory[],
+  photos: SignUpInput["menuPhotos"],
+  setPhoto: (itemId: string, photo: Blob) => Promise<void>,
+): Promise<void> {
+  for (const { category, name, photo } of photos) {
+    const item = findCategory(menu, category)?.items.find((i) => sameName(i.name, name));
+    if (item) await setPhoto(item.id, photo);
+  }
+}
+
 export const mockServices: Services = {
   guest: guestService,
   auth: {
@@ -135,6 +150,7 @@ export const mockServices: Services = {
       const session: Session = { name: input.name.trim(), email: input.email.trim() };
       const workspace = workspaceFromSignUp({
         industry: input.industry,
+        venueType: input.venueType,
         venueName: input.venueName.trim(),
         country: input.country,
         region: input.region,
@@ -147,6 +163,7 @@ export const mockServices: Services = {
         state.workspaces = [workspace, ...state.workspaces.filter((w) => w.id !== YOUR_VENUE_ID)];
         state.activeId = workspace.id;
       });
+      await attachPhotos(workspace.menu, input.menuPhotos, (itemId, photo) => mockServices.menu.setPhoto(itemId, photo));
       return session;
     },
     async logIn(email) {
@@ -437,31 +454,9 @@ export const mockServices: Services = {
     },
   },
 
-  staff: {
-    async list() {
-      return current().staff;
-    },
-    async invite(member) {
-      updateActive((workspace) => {
-        workspace.staff.push({ ...member, id: crypto.randomUUID() });
-      });
-    },
-    async setRole(id, role) {
-      updateActive((workspace) => {
-        const member = workspace.staff.find((s) => s.id === id);
-        if (!member) throw new ServiceError("That person is no longer on the team.");
-        if (member.role === "owner") throw new ServiceError("The owner's role can't be changed here.");
-        member.role = role;
-      });
-    },
-    async remove(id) {
-      updateActive((workspace) => {
-        const member = workspace.staff.find((s) => s.id === id);
-        if (member?.role === "owner") throw new ServiceError("The owner can't be removed.");
-        workspace.staff = workspace.staff.filter((s) => s.id !== id);
-      });
-    },
-  },
+  staff: staffService,
+  branding: brandingService,
+  staffMode: staffModeService,
 
   payments: {
     async status() {

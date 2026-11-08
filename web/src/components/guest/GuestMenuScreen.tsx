@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CartSheet } from "@/components/cart/CartSheet";
+import { GuestMenuHeader } from "@/components/guest/GuestMenuHeader";
 import { ModifierSheet } from "@/components/modifier-sheet/ModifierSheet";
 import { Button, FormError, TextField } from "@/components/ui";
 import type { Cart, MenuItem } from "@/lib/api-types";
+import { brandStyle } from "@/lib/brand/style";
 import { LOCAL_VENUE_NOTE } from "@/lib/demo";
 import { CHECKOUT_NOTE, DEMO_CLOUD, SHARED_SLUGS, VENUE_NOT_FOUND_NOTE } from "@/lib/demo-cloud/config";
 import { MAX_GUEST_NAME } from "@/lib/guest";
@@ -65,7 +67,7 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
   if (!data) return <div className="p-6"><FormError message={error} /></div>;
   const { venue, cart } = data;
   if (!venue || !cart) return <NotFoundHere />;
-  const { menu, access, serviceMode, touchpointLabel, localOnly } = venue;
+  const { menu, access, serviceMode, touchpointLabel, localOnly, branding } = venue;
   const currency = menu.venue.currency;
   const sampleNote = menu.categories.some((c) => c.items.some((i) => i.allergens.some((a) => a.includes("(sample data)"))));
   const pickup = serviceMode === "pickup";
@@ -109,18 +111,14 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
 
   const blocked = cart.lines.some((l) => !l.available);
   return (
-    <div className="mx-auto max-w-2xl pb-28">
-      <header className="sticky top-0 z-10 border-b bg-white/95 px-4 pt-4 pb-2 backdrop-blur">
-        <div className="flex items-baseline justify-between gap-3">
-          <h1 className="text-xl font-bold">{menu.venue.name}</h1>
-          <span className="text-sm text-gray-600">{touchpointLabel}</span>
-        </div>
+    <div className="mx-auto max-w-2xl pb-28" style={brandStyle(branding.color)}>
+      <GuestMenuHeader name={menu.venue.name} touchpointLabel={touchpointLabel} branding={branding}>
         <nav aria-label="Menu sections" className="-mx-4 mt-2 flex gap-2 overflow-x-auto px-4 pb-1">
           {menu.categories.map((c) => (
             <a key={c.id} href={`#cat-${c.id}`} className="shrink-0 rounded-full border px-3 py-1 text-sm">{c.name}</a>
           ))}
         </nav>
-      </header>
+      </GuestMenuHeader>
 
       <div className="space-y-2 px-4 pt-3">
         <p role="note" className="rounded-lg bg-spark/30 px-3 py-2 text-sm font-medium text-ink">
@@ -177,7 +175,7 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
           <button
             type="button"
             onClick={() => setCartOpen(true)}
-            className="mx-auto flex w-full max-w-2xl items-center justify-between rounded-lg bg-gray-900 px-4 py-3 font-medium text-white"
+            className="brand-button mx-auto flex w-full max-w-2xl items-center justify-between rounded-lg px-4 py-3 font-medium"
           >
             <span>View cart · {cart.item_count} {cart.item_count === 1 ? "item" : "items"}</span>
             <span className="tabular-nums">{formatCents(cart.total_cents, cart.currency)}</span>
@@ -218,7 +216,7 @@ export function GuestMenuScreen({ context }: { context: GuestContext }) {
                   onChange={(e) => setGuestName(e.target.value)}
                 />
               ) : null}
-              <Button className="w-full" disabled={busy || blocked || !cart.can_checkout} onClick={() => void placeOrder()}>
+              <Button variant="brand" className="w-full" disabled={busy || blocked || !cart.can_checkout} onClick={() => void placeOrder()}>
                 Pay {formatCents(cart.total_cents, cart.currency)} (demo)
               </Button>
               <p className="text-center text-xs text-gray-500">

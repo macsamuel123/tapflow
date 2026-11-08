@@ -23,3 +23,18 @@ test("@saas shared code stays venue-generic", async () => {
   }
   expect(hits).toEqual([]);
 });
+
+test("@saas staff screens and role names stay venue-generic", async () => {
+  const root = join(process.cwd(), "src");
+  const files = [
+    ...(await sources(join(root, "components/staff"))),
+    join(root, "app/(dashboard)/dashboard/staff/page.tsx"),
+    join(root, "lib/staff/permissions.ts"),
+  ];
+  const hits: string[] = [];
+  for (const file of files) {
+    const text = await readFile(file, "utf8");
+    if (/kitchen|restaurant|waiter|waitress|brewery|bar staff/i.test(text)) hits.push(relative(root, file));
+  }
+  expect(hits).toEqual([]);
+});

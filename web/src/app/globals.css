@@ -10,3 +10,12 @@
   --color-spark: #ffb547;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/* A venue's brand colour on guest buttons. --brand-text is chosen for WCAG AA contrast. */
+.brand-button {
+  background-color: var(--brand, #111827);
+  color: var(--brand-text, #fff);
+}
+.brand-button:hover {
+  filter: brightness(0.92);
+}
