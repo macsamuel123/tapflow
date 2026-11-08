@@ -8,12 +8,19 @@ import {
   SPOT_TYPES,
   setupPreview,
   spotLabel,
+  type OpenSetup,
   type SetupErrors,
 } from "@/lib/service-setup";
 import type { ServiceSetup } from "@/services/types";
 
-/** spotCount stays as typed, so invalid input can be shown and rejected rather than coerced. */
-export type SetupForm = Omit<ServiceSetup, "spotCount"> & { spotCount: string };
+/** spotCount stays as typed, so invalid input can be shown and rejected rather than coerced.
+ *  The yes/no answers can be unanswered (null) until the owner picks. */
+export type SetupForm = Omit<OpenSetup, "spotCount"> & { spotCount: string };
+
+/** Only call after validateSetup passed: unanswered questions count as no. */
+export function toServiceSetup(form: SetupForm, spotCount: number): ServiceSetup {
+  return { ...form, spotsEnabled: form.spotsEnabled === true, pickupEnabled: form.pickupEnabled === true, spotCount };
+}
 
 export function ServiceSetupFields({
   value,
@@ -24,7 +31,12 @@ export function ServiceSetupFields({
   errors: SetupErrors;
   onChange: (patch: Partial<SetupForm>) => void;
 }) {
-  const preview = setupPreview(value.spotsEnabled, value.spotType, value.spotCount, value.pickupEnabled);
+  const preview = setupPreview(
+    value.spotsEnabled === true,
+    value.spotType,
+    value.spotCount,
+    value.pickupEnabled === true,
+  );
   return (
     <div className="space-y-5">
       <YesNo

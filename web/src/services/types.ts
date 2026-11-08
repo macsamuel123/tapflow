@@ -11,11 +11,27 @@ export type IndustryId =
   | "resorts"
   | "golf"
   | "food-halls"
-  | "food-trucks";
+  | "food-trucks"
+  | "other";
 
 export type SpotType = "table" | "seat" | "lounger" | "cart";
 export type ServiceMode = "delivery" | "pickup";
-export type StaffRole = "owner" | "manager" | "fulfillment" | "runner";
+/** `fulfillment` is shown as "Cook" by default. Labels are owner-editable and never grant anything. */
+export type StaffRole = "owner" | "manager" | "fulfillment" | "bartender" | "server" | "runner" | "host";
+export type StaffAction =
+  | "view_fulfillment"
+  | "accept"
+  | "ready"
+  | "delivered"
+  | "picked_up"
+  | "cancel"
+  | "sold_out"
+  | "view_ready"
+  | "view_orders"
+  | "view_touchpoints"
+  | "manage_staff"
+  | "edit_branding";
+export type RoleLabels = Record<StaffRole, string>;
 export type CountryCode = "CA" | "US";
 export type OrderStatus = "paid" | "accepted" | "ready" | "delivered" | "picked_up" | "cancelled";
 
@@ -26,10 +42,16 @@ export type Venue = {
   slug: string;
   name: string;
   industry: IndustryId;
+  /** Free text, only for the "other" industry. */
+  venueType: string | null;
   country: CountryCode;
   region: string;
   currency: string;
 };
+
+/** A hex colour like #1d4ed8. Null keeps the TapFlow look. */
+export type Branding = { logoUrl: string | null; coverUrl: string | null; color: string | null };
+export type BrandImage = "logo" | "cover";
 
 export type ServiceSetup = {
   spotsEnabled: boolean;
@@ -149,7 +171,36 @@ export type DuplicateMode = "skip" | "update";
 
 export type ImportResult = { imported: number; updated: number; skipped: number };
 
-export type StaffMember = { id: string; name: string; email: string; role: StaffRole };
+/** PINs never leave the service: a member only says whether one is set. */
+export type StaffMember = {
+  id: string;
+  name: string;
+  role: StaffRole;
+  active: boolean;
+  hasPin: boolean;
+  /** The person who signed the venue up: can't be changed or deactivated here. */
+  accountOwner: boolean;
+  /** Owner and Manager only: a mock link until real accounts exist. */
+  inviteUrl?: string;
+};
+
+export type NewStaffMember = { name: string; role: StaffRole; pin: string | null };
+
+/** Who is signed in on a staff device. The role is re-read on every request. */
+export type StaffSession = {
+  staffId: string;
+  name: string;
+  role: StaffRole;
+  roleLabel: string;
+  venueName: string;
+  currency: string;
+};
+
+export type StaffLoginResult =
+  | { status: "ok"; session: StaffSession }
+  | { status: "wrong_pin"; triesLeft: number }
+  | { status: "locked" }
+  | { status: "no_venue" };
 
 export type PaymentStatus = { connected: boolean; accountLabel: string | null };
 
@@ -159,6 +210,7 @@ export type WorkspaceSummary = { id: string; name: string; active: boolean };
 
 export type SignUpInput = {
   industry: IndustryId;
+  venueType: string | null;
   name: string;
   email: string;
   password: string;
@@ -168,6 +220,8 @@ export type SignUpInput = {
   setup: ServiceSetup;
   /** Empty when step 5 was skipped: the venue starts with the sample menu. */
   menuRows: MenuImportRow[];
+  /** Photos for items in menuRows, matched by category and name. */
+  menuPhotos: { category: string; name: string; photo: Blob }[];
 };
 
 export type VenueDetails = Pick<Venue, "name" | "country" | "region">;
@@ -240,9 +294,39 @@ export interface MenuService {
 
 export interface StaffService {
   list(): Promise<StaffMember[]>;
-  invite(member: Omit<StaffMember, "id">): Promise<void>;
-  setRole(id: string, role: StaffRole): Promise<void>;
-  remove(id: string): Promise<void>;
+  /** A PIN role needs a 4-digit PIN, unique in the venue. Owner and Manager get an invite link. */
+  add(member: NewStaffMember): Promise<StaffMember>;
+  /** Moving to a PIN role needs a PIN if the person has none. */
+  setRole(id: string, role: StaffRole, pin?: string | null): Promise<void>;
+  /** Signs the person out of every staff device. */
+  resetPin(id: string, pin: string): Promise<void>;
+  /** Takes effect at once: their staff device signs out. */
+  deactivate(id: string): Promise<void>;
+  roleLabels(): Promise<RoleLabels>;
+  renameRole(role: StaffRole, label: string): Promise<void>;
+}
+
+export interface BrandingService {
+  get(): Promise<Branding>;
+  /** The colour is darkened to pass WCAG AA before it's stored. Returns what was stored. */
+  saveColor(color: string | null): Promise<Branding>;
+  upload(kind: BrandImage, image: Blob): Promise<void>;
+  remove(kind: BrandImage): Promise<void>;
+}
+
+/** A shared staff device at /staff/<slug>. Every action is checked against the role. */
+export interface StaffModeService {
+  /** The PIN pad's labels and the venue name, before anyone signs in. Null for an unknown venue. */
+  venue(slug: string): Promise<{ name: string; roleLabels: RoleLabels } | null>;
+  login(slug: string, pin: string): Promise<StaffLoginResult>;
+  logout(slug: string): Promise<void>;
+  /** Null once signed out, deactivated or after a PIN reset. */
+  current(slug: string): Promise<StaffSession | null>;
+  orders(slug: string): Promise<Order[]>;
+  menu(slug: string): Promise<MenuCategory[]>;
+  touchpoints(slug: string): Promise<Touchpoint[]>;
+  setStatus(slug: string, orderId: string, status: OrderStatus): Promise<void>;
+  setSoldOut(slug: string, itemId: string, soldOut: boolean): Promise<void>;
 }
 
 export interface PaymentService {
@@ -264,6 +348,7 @@ export type GuestVenue = {
   access: GuestAccess;
   /** Only in this browser: the tester's own venue, not a fixed demo venue. */
   localOnly: boolean;
+  branding: Branding;
 };
 
 export type GuestOrder = {
@@ -302,5 +387,7 @@ export interface Services {
   orders: OrderService;
   menu: MenuService;
   staff: StaffService;
+  branding: BrandingService;
+  staffMode: StaffModeService;
   payments: PaymentService;
 }

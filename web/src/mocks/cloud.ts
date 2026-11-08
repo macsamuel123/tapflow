@@ -16,6 +16,7 @@ import {
 import { READ_ONLY_NOTE, SHARED_SLUGS, type DemoOrderRow, type VenueSnapshot } from "@/lib/demo-cloud/config";
 import { ServiceError } from "@/services/types";
 import type {
+  Branding,
   GuestContext,
   GuestOrder,
   GuestService,
@@ -29,6 +30,8 @@ import type {
   Venue,
 } from "@/services/types";
 import { BREWERY_ID, demoBrewery, demoFoodTruck, FOOD_TRUCK_ID, GST, PST, workspaceFromSignUp } from "./fixtures";
+import { cloudBranding, cloudStaff, cloudStaffMode } from "./cloud-staff";
+import { attachPhotos } from "./index";
 import { activeWorkspace, readState, update, type Workspace } from "./store";
 
 const FIXED_MENUS = [demoBrewery(), demoFoodTruck()];
@@ -50,6 +53,11 @@ function isFixedContext(context: Pick<GuestContext, "slug" | "touchpointId">): b
 }
 
 
+function readBranding(raw: unknown): Branding {
+  const b = (raw ?? {}) as Partial<Branding>;
+  return { logoUrl: b.logoUrl ?? null, coverUrl: b.coverUrl ?? null, color: b.color ?? null };
+}
+
 function workspaceId(venueId: string): string {
   return `venue-${venueId}`;
 }
@@ -63,6 +71,8 @@ function fromSnapshot(snapshot: VenueSnapshot, code: string, previous?: Workspac
     orders: [],
     menu: snapshot.menu,
     staff: previous?.staff ?? [],
+    roleLabels: snapshot.roleLabels,
+    branding: snapshot.branding,
     payment: previous?.payment ?? { connected: false, accountLabel: null },
     taxes: previous?.taxes ?? [GST, PST],
     sampleMenu: snapshot.sampleMenu,
@@ -161,8 +171,10 @@ async function loadGuestVenue(context: GuestContext): Promise<boolean> {
   update((state) => {
     const venueId = found.venue.id as string;
     const owned = state.workspaces.find((w) => w.cloud?.venueId === venueId);
+    const branding = readBranding(found.venue.branding);
     if (owned) {
       owned.menu = found.menu as MenuCategory[];
+      owned.branding = branding;
       return;
     }
     const id = `guest-${venueId}`;
@@ -175,6 +187,7 @@ async function loadGuestVenue(context: GuestContext): Promise<boolean> {
         slug: found.venue.slug as string,
         name: found.venue.name as string,
         industry: found.venue.industry as Venue["industry"],
+        venueType: (found.venue.venue_type as string | null) ?? null,
         country: found.venue.country as "CA" | "US",
         region: "",
         currency: found.venue.currency as string,
@@ -183,6 +196,7 @@ async function loadGuestVenue(context: GuestContext): Promise<boolean> {
       touchpoints: [...others, point],
       orders: [],
       menu: found.menu as MenuCategory[],
+      branding,
       staff: [],
       payment: { connected: false, accountLabel: null },
       taxes: [GST, PST],
@@ -331,15 +345,20 @@ export function cloudServices(mock: Services): Services {
     },
   };
 
-  return {
+  const context = { active, inFixedDemo, toOrder };
+  const services: Services = {
     ...mock,
     guest: cloudGuest,
+    staff: cloudStaff(mock.staff, context),
+    branding: cloudBranding(mock.branding, context, pull),
+    staffMode: cloudStaffMode(context),
     auth: {
       ...auth,
       async signUp(input) {
         const session: Session = { name: input.name.trim(), email: input.email.trim() };
         const draft = workspaceFromSignUp({
           industry: input.industry,
+          venueType: input.venueType,
           venueName: input.venueName.trim(),
           country: input.country,
           region: input.region,
@@ -351,6 +370,7 @@ export function cloudServices(mock: Services): Services {
         const { code, snapshot } = await postJson<{ code: string; snapshot: VenueSnapshot }>("/demo/api/venues", {
           name: draft.venue.name,
           industry: draft.venue.industry,
+          venueType: draft.venue.venueType,
           country: draft.venue.country,
           region: draft.venue.region,
           menu: draft.menu,
@@ -364,6 +384,8 @@ export function cloudServices(mock: Services): Services {
           state.workspaces = [next, ...state.workspaces];
           state.activeId = id;
         });
+        // The photo route needs the recovery code, so photos go on once the venue exists.
+        await attachPhotos(active().menu, input.menuPhotos, (itemId, photo) => services.menu.setPhoto(itemId, photo));
         return session;
       },
       async openVenue(rawCode) {
@@ -499,5 +521,5 @@ export function cloudServices(mock: Services): Services {
       ),
     },
   };
+  return services;
 }
-

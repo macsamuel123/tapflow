@@ -1,5 +1,11 @@
 import type { ServiceSetup, SpotType } from "@/services/types";
 
+/** A setup still being answered: null means the owner hasn't chosen yes or no. */
+export type OpenSetup = Omit<ServiceSetup, "spotsEnabled" | "pickupEnabled"> & {
+  spotsEnabled: boolean | null;
+  pickupEnabled: boolean | null;
+};
+
 export const MIN_SPOTS = 1;
 export const MAX_SPOTS = 500;
 export const MAX_PICKUP_NAME = 40;
@@ -34,6 +40,8 @@ export function parseSpotCount(raw: string): number | null {
 
 export type SetupErrors = { spotCount?: string; pickupName?: string; choice?: string };
 
+export const ANSWER_BOTH_MESSAGE = "Choose yes or no for both questions.";
+
 export const CHOOSE_ONE_MESSAGE = "Choose at least one: tables or spots, or a pickup point.";
 
 export function spotCountMessage(): string {
@@ -41,11 +49,12 @@ export function spotCountMessage(): string {
 }
 
 export function validateSetup(
-  setup: Pick<ServiceSetup, "spotsEnabled" | "pickupEnabled" | "pickupName">,
+  setup: Pick<OpenSetup, "spotsEnabled" | "pickupEnabled" | "pickupName">,
   rawSpotCount: string,
 ): SetupErrors {
   const errors: SetupErrors = {};
-  if (!setup.spotsEnabled && !setup.pickupEnabled) errors.choice = CHOOSE_ONE_MESSAGE;
+  if (setup.spotsEnabled === null || setup.pickupEnabled === null) errors.choice = ANSWER_BOTH_MESSAGE;
+  else if (!setup.spotsEnabled && !setup.pickupEnabled) errors.choice = CHOOSE_ONE_MESSAGE;
   if (setup.spotsEnabled && parseSpotCount(rawSpotCount) === null) {
     errors.spotCount = spotCountMessage();
   }

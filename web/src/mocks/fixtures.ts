@@ -2,6 +2,7 @@ import { DEFAULT_PICKUP_NAME } from "@/lib/industries";
 import { quote } from "@/lib/pricing";
 import { spotName } from "@/lib/service-setup";
 import type {
+  Branding,
   CountryCode,
   IndustryId,
   MenuCategory,
@@ -12,14 +13,15 @@ import type {
   OrderStatus,
   ServiceMode,
   ServiceSetup,
-  StaffMember,
   TaxCategory,
   TaxRate,
   Touchpoint,
   Venue,
 } from "@/services/types";
 import { applyImport } from "./menu-ops";
-import type { Workspace } from "./store";
+import { SAMPLE_TEAM } from "@/lib/staff/sample-team";
+import { mockPinHash } from "./staff-auth";
+import type { StoredStaff, Workspace } from "./store";
 
 export const BREWERY_ID = "demo-brewery";
 export const FOOD_TRUCK_ID = "demo-food-truck";
@@ -266,13 +268,36 @@ function sampleOrders(menu: MenuCategory[], touchpoints: Touchpoint[]): Order[] 
   return orders.reverse();
 }
 
-function sampleStaff(owner: { name: string; email: string }, domain: string): StaffMember[] {
+function sampleStaff(ownerName: string): StoredStaff[] {
   return [
-    { id: id(), name: owner.name, email: owner.email, role: "owner" },
-    { id: id(), name: "Jordan Lee", email: `jordan@${domain}`, role: "manager" },
-    { id: id(), name: "Mina Park", email: `mina@${domain}`, role: "fulfillment" },
-    { id: id(), name: "Theo Grant", email: `theo@${domain}`, role: "runner" },
+    { id: id(), name: ownerName, role: "owner", active: true, pinHash: null, pinVersion: 1, accountOwner: true },
+    ...SAMPLE_TEAM.map((member) => ({
+      id: id(),
+      name: member.name,
+      role: member.role,
+      active: true,
+      pinHash: member.pin ? mockPinHash(member.pin) : null,
+      pinVersion: 1,
+    })),
   ];
+}
+
+const BREWERY_BRANDING: Branding = {
+  logoUrl: "/demo-brand/brewery-logo.svg",
+  coverUrl: "/demo-brand/brewery-cover.svg",
+  color: "#8a4b0f",
+};
+
+const FOOD_TRUCK_BRANDING: Branding = {
+  logoUrl: "/demo-brand/truck-logo.svg",
+  coverUrl: "/demo-brand/truck-cover.svg",
+  color: "#b42318",
+};
+
+export function sampleBranding(workspaceId: string): Branding | undefined {
+  if (workspaceId === BREWERY_ID) return { ...BREWERY_BRANDING };
+  if (workspaceId === FOOD_TRUCK_ID) return { ...FOOD_TRUCK_BRANDING };
+  return undefined;
 }
 
 function venue(
@@ -281,8 +306,9 @@ function venue(
   industry: IndustryId,
   country: CountryCode,
   region: string,
+  venueType: string | null = null,
 ): Venue {
-  return { id: id(), slug, name, industry, country, region, currency: country === "US" ? "USD" : "CAD" };
+  return { id: id(), slug, name, industry, venueType, country, region, currency: country === "US" ? "USD" : "CAD" };
 }
 
 export function demoBrewery(): Workspace {
@@ -298,7 +324,8 @@ export function demoBrewery(): Workspace {
     touchpoints,
     orders: sampleOrders(menu, touchpoints),
     menu,
-    staff: sampleStaff({ name: "Sam Rivera", email: "sam@demobrewery.test" }, "demobrewery.test"),
+    staff: sampleStaff("Sam Rivera"),
+    branding: sampleBranding(BREWERY_ID),
     payment: { connected: true, accountLabel: "Demo Brewery (test account)" },
     taxes: [GST, PST],
     sampleMenu: true,
@@ -316,7 +343,8 @@ export function demoFoodTruck(): Workspace {
     touchpoints,
     orders: sampleOrders(menu, touchpoints),
     menu,
-    staff: sampleStaff({ name: "Ana Torres", email: "ana@demotruck.test" }, "demotruck.test"),
+    staff: sampleStaff("Ana Torres"),
+    branding: sampleBranding(FOOD_TRUCK_ID),
     payment: { connected: false, accountLabel: null },
     taxes: [GST, PST],
     sampleMenu: true,
@@ -326,6 +354,7 @@ export function demoFoodTruck(): Workspace {
 
 export function workspaceFromSignUp(input: {
   industry: IndustryId;
+  venueType: string | null;
   name: string;
   email: string;
   venueName: string;
@@ -347,12 +376,12 @@ export function workspaceFromSignUp(input: {
   applyImport(own, input.menuRows, "update");
   return {
     id: YOUR_VENUE_ID,
-    venue: venue(input.venueName, slugify(input.venueName), input.industry, input.country, input.region),
+    venue: venue(input.venueName, slugify(input.venueName), input.industry, input.country, input.region, input.venueType),
     spotType: setup.spotType,
     touchpoints,
     orders: sampleOrders(sample, touchpoints),
     menu: own.length ? own : sample,
-    staff: sampleStaff({ name: input.name, email: input.email }, "example.test"),
+    staff: sampleStaff(input.name),
     payment: { connected: false, accountLabel: null },
     taxes: [GST, PST],
     sampleMenu: own.length === 0,

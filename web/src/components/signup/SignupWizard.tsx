@@ -2,29 +2,39 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { ServiceSetupFields, type SetupForm } from "@/components/setup/ServiceSetupFields";
+import { ServiceSetupFields, toServiceSetup, type SetupForm } from "@/components/setup/ServiceSetupFields";
 import {
   blankQuickItem,
   hasQuickItemErrors,
   isBlankQuickItem,
+  quickPhotos,
   quickRows,
   StepFirstItems,
   type QuickItem,
+  type QuickPhotos,
 } from "@/components/signup/StepFirstItems";
 import { Button, FormError, SelectField, TextField } from "@/components/ui";
-import { defaultSetup, findIndustry, INDUSTRIES } from "@/lib/industries";
+import { defaultSetup, findIndustry, MAX_VENUE_TYPE, SIGNUP_INDUSTRIES, venueTypeError } from "@/lib/industries";
 import { COUNTRIES, REGIONS } from "@/lib/regions";
 import { parseSpotCount, validateSetup } from "@/lib/service-setup";
 import { emailError, passwordError } from "@/lib/validation";
 import { getServices } from "@/services";
-import { ServiceError, type CountryCode, type IndustryId, type MenuImportRow } from "@/services/types";
+import {
+  ServiceError,
+  type CountryCode,
+  type IndustryId,
+  type MenuImportRow,
+  type SignUpInput,
+} from "@/services/types";
 
-const DRAFT_KEY = "tapflow:signup-draft:v3";
+const DRAFT_KEY = "tapflow:signup-draft:v4";
 const STEP_COUNT = 5;
 
 // Passwords are left out so they never reach browser storage.
 type Draft = {
   industry: IndustryId | null;
+  /** Only used when industry is "other". */
+  venueType: string;
   name: string;
   email: string;
   venueName: string;
@@ -32,7 +42,6 @@ type Draft = {
   region: string;
   setup: SetupForm;
   quickItems: QuickItem[];
-  csvRows: MenuImportRow[];
 };
 
 function setupFor(industry: IndustryId | null): SetupForm {
@@ -43,6 +52,7 @@ function setupFor(industry: IndustryId | null): SetupForm {
 function blankDraft(industry: IndustryId | null): Draft {
   return {
     industry,
+    venueType: "",
     name: "",
     email: "",
     venueName: "",
@@ -50,7 +60,6 @@ function blankDraft(industry: IndustryId | null): Draft {
     region: "",
     setup: setupFor(industry),
     quickItems: [blankQuickItem()],
-    csvRows: [],
   };
 }
 
@@ -75,6 +84,7 @@ export function SignupWizard() {
   const [attempted, setAttempted] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [photos, setPhotos] = useState<QuickPhotos>({});
 
   useEffect(() => {
     window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -92,8 +102,14 @@ export function SignupWizard() {
   };
   const setupErrors = validateSetup(draft.setup, draft.setup.spotCount);
   const quickValid = draft.quickItems.every((q) => isBlankQuickItem(q) || !hasQuickItemErrors(q));
+  const industryError =
+    draft.industry === null
+      ? "Choose your venue type to continue."
+      : draft.industry === "other"
+        ? venueTypeError(draft.venueType)
+        : null;
   const complete = [
-    draft.industry !== null,
+    industryError === null,
     !Object.values(accountErrors).some(Boolean),
     !Object.values(venueErrors).some(Boolean),
     Object.keys(setupErrors).length === 0,
@@ -123,7 +139,7 @@ export function SignupWizard() {
     router.push(`/signup?${query.toString()}`);
   }
 
-  async function submit(menuRows: MenuImportRow[]) {
+  async function submit(menuRows: MenuImportRow[], menuPhotos: SignUpInput["menuPhotos"]) {
     const spotCount = parseSpotCount(draft.setup.spotCount) ?? 0;
     if (!draft.industry) return;
     setBusy(true);
@@ -131,14 +147,16 @@ export function SignupWizard() {
     try {
       await getServices().auth.signUp({
         industry: draft.industry,
+        venueType: draft.industry === "other" ? draft.venueType.trim() : null,
         name: draft.name,
         email: draft.email,
         password,
         venueName: draft.venueName,
         country: draft.country,
         region: draft.region,
-        setup: { ...draft.setup, spotCount },
+        setup: toServiceSetup(draft.setup, spotCount),
         menuRows,
+        menuPhotos,
       });
       window.sessionStorage.removeItem(DRAFT_KEY);
       router.push("/signup/ready");
@@ -154,7 +172,7 @@ export function SignupWizard() {
       setAttempted(step);
       return;
     }
-    if (step === STEP_COUNT) void submit([...draft.csvRows, ...quickRows(draft.quickItems)]);
+    if (step === STEP_COUNT) void submit(quickRows(draft.quickItems), quickPhotos(draft.quickItems, photos));
     else goTo(step + 1);
   }
 
@@ -175,7 +193,7 @@ export function SignupWizard() {
         <fieldset className="space-y-3">
           <legend className="text-2xl font-black text-ink">What kind of venue do you run?</legend>
           <div className="grid gap-2 pt-2">
-            {INDUSTRIES.map((industry) => {
+            {SIGNUP_INDUSTRIES.map((industry) => {
               const selected = draft.industry === industry.id;
               return (
                 <label
@@ -198,7 +216,17 @@ export function SignupWizard() {
               );
             })}
           </div>
-          {showErrors ? <FormError message="Choose your venue type to continue." /> : null}
+          {draft.industry === "other" ? (
+            <TextField
+              label="Venue type"
+              hint="For example: bowling alley, cinema, market stall"
+              maxLength={MAX_VENUE_TYPE + 10}
+              value={draft.venueType}
+              error={showErrors ? (industryError ?? undefined) : undefined}
+              onChange={(e) => patch({ venueType: e.target.value })}
+            />
+          ) : null}
+          {showErrors && draft.industry === null ? <FormError message={industryError} /> : null}
         </fieldset>
       ) : null}
 
@@ -288,11 +316,10 @@ export function SignupWizard() {
       {step === 5 ? (
         <StepFirstItems
           quickItems={draft.quickItems}
-          csvRows={draft.csvRows}
-          currency={draft.country === "US" ? "USD" : "CAD"}
+          photos={photos}
           showErrors={showErrors}
           onQuickItems={(quickItems) => patch({ quickItems })}
-          onCsvRows={(csvRows) => patch({ csvRows })}
+          onPhotos={setPhotos}
         />
       ) : null}
 
@@ -307,7 +334,7 @@ export function SignupWizard() {
         </Button>
       </div>
       {step === STEP_COUNT ? (
-        <Button variant="ghost" className="w-full" disabled={busy} onClick={() => void submit([])}>
+        <Button variant="ghost" className="w-full" disabled={busy} onClick={() => void submit([], [])}>
           Skip for now
         </Button>
       ) : null}

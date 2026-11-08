@@ -9,9 +9,9 @@ export function photoFileError(file: Pick<File, "type" | "size">): string | null
 }
 
 /** Resizes and compresses in the browser. Always JPEG, because Safari can't export WebP. */
-export async function preparePhoto(file: File): Promise<Blob> {
+export async function preparePhoto(file: File, maxEdge = MAX_EDGE): Promise<Blob> {
   const image = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_EDGE / Math.max(image.width, image.height));
+  const scale = Math.min(1, maxEdge / Math.max(image.width, image.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(image.width * scale);
   canvas.height = Math.round(image.height * scale);
@@ -25,3 +25,6 @@ export async function preparePhoto(file: File): Promise<Blob> {
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Export failed"))), "image/jpeg", QUALITY);
   });
 }
+
+/** What a stored photo may weigh after resizing: the cloud bucket's limit. */
+export const MAX_STORED_BYTES = 500 * 1024;

@@ -1,12 +1,14 @@
-import type { IndustryId, ServiceSetup, SpotType } from "@/services/types";
+import type { OpenSetup } from "@/lib/service-setup";
+import type { IndustryId, SpotType } from "@/services/types";
 
 export type Industry = {
   id: IndustryId;
   name: string;
   blurb: string;
-  spotsByDefault: boolean;
+  /** Null asks the owner, with nothing pre-selected. */
+  spotsByDefault: boolean | null;
   spotType: SpotType;
-  pickupByDefault: boolean;
+  pickupByDefault: boolean | null;
 };
 
 export const INDUSTRIES: readonly Industry[] = [
@@ -68,16 +70,37 @@ export const INDUSTRIES: readonly Industry[] = [
   },
 ];
 
-export function findIndustry(id: string | null | undefined): Industry | null {
-  return INDUSTRIES.find((industry) => industry.id === id) ?? null;
+/** Any other kind of venue: the owner names it, and answers the setup questions themselves. */
+export const OTHER_INDUSTRY: Industry = {
+  id: "other",
+  name: "Other",
+  blurb: "Tell us what you run.",
+  spotsByDefault: null,
+  spotType: "table",
+  pickupByDefault: null,
+};
+
+/** The sign-up picker: every industry, then Other. */
+export const SIGNUP_INDUSTRIES: readonly Industry[] = [...INDUSTRIES, OTHER_INDUSTRY];
+
+export const MAX_VENUE_TYPE = 40;
+
+export function venueTypeError(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "Tell us what kind of venue it is.";
+  return trimmed.length > MAX_VENUE_TYPE ? `Use ${MAX_VENUE_TYPE} characters or fewer.` : null;
 }
 
-export function defaultSetup(industry: Industry | null): ServiceSetup {
+export function findIndustry(id: string | null | undefined): Industry | null {
+  return SIGNUP_INDUSTRIES.find((industry) => industry.id === id) ?? null;
+}
+
+export function defaultSetup(industry: Industry | null): OpenSetup {
   return {
-    spotsEnabled: industry?.spotsByDefault ?? true,
+    spotsEnabled: industry ? industry.spotsByDefault : true,
     spotType: industry?.spotType ?? "table",
     spotCount: 12,
-    pickupEnabled: industry?.pickupByDefault ?? false,
+    pickupEnabled: industry ? industry.pickupByDefault : false,
     pickupName: DEFAULT_PICKUP_NAME,
   };
 }

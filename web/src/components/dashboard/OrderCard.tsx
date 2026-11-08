@@ -1,6 +1,7 @@
 import { Button, Card, Pill, type Tone } from "@/components/ui";
 import { formatCents } from "@/lib/money";
-import type { Order, OrderStatus } from "@/services/types";
+import { actionForStatus } from "@/lib/staff/permissions";
+import type { Order, OrderStatus, StaffAction } from "@/services/types";
 
 const STATUS: Record<OrderStatus, { label: string; tone: Tone }> = {
   paid: { label: "Paid", tone: "blue" },
@@ -41,12 +42,19 @@ export function OrderCard({
   order,
   currency,
   onStatus,
+  allowed = () => true,
 }: {
   order: Order;
   currency: string;
   onStatus?: (status: OrderStatus) => void;
+  /** Staff mode passes the role's permissions, so a control it can't use never shows. */
+  allowed?: (action: StaffAction) => boolean;
 }) {
   const status = STATUS[order.status];
+  const may = (next: OrderStatus) => {
+    const action = actionForStatus(next);
+    return action !== null && allowed(action);
+  };
   const steps = flow(order);
   const reached = steps.indexOf(order.status);
   return (
@@ -86,12 +94,12 @@ export function OrderCard({
         </p>
         {onStatus ? (
           <div className="flex gap-2">
-            {order.status === "paid" || order.status === "accepted" ? (
+            {(order.status === "paid" || order.status === "accepted") && may("cancelled") ? (
               <Button variant="danger" onClick={() => onStatus("cancelled")}>Cancel</Button>
             ) : null}
-            {order.status === "paid" ? <Button onClick={() => onStatus("accepted")}>Accept</Button> : null}
-            {order.status === "accepted" ? <Button onClick={() => onStatus("ready")}>Mark ready</Button> : null}
-            {order.status === "ready" ? (
+            {order.status === "paid" && may("accepted") ? <Button onClick={() => onStatus("accepted")}>Accept</Button> : null}
+            {order.status === "accepted" && may("ready") ? <Button onClick={() => onStatus("ready")}>Mark ready</Button> : null}
+            {order.status === "ready" && may(steps[3]!) ? (
               <Button onClick={() => onStatus(steps[3]!)}>{STATUS[steps[3]!].label}</Button>
             ) : null}
           </div>

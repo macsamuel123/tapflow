@@ -18,6 +18,7 @@ export const PRIMARY_NAV: NavItem[] = [
 ];
 
 export const SECONDARY_NAV: NavItem[] = [
+  { href: "/dashboard/profile", label: "Profile", icon: <Icon><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-8 8" /></Icon> },
   { href: "/dashboard/staff", label: "Staff", icon: <Icon><circle cx="9" cy="8" r="3.5" /><path d="M3 20c0-3.5 2.5-6 6-6s6 2.5 6 6" /><path d="M16 5a3.5 3.5 0 010 6.5M18 14c2 .8 3 3 3 6" /></Icon> },
   { href: "/dashboard/payments", label: "Payments", icon: <Icon><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10h18" /></Icon> },
   { href: "/dashboard/settings", label: "Settings", icon: <Icon><circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></Icon> },

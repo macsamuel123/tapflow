@@ -1,11 +1,13 @@
 import { ServiceError } from "@/services/types";
 import type {
+  Branding,
   MenuCategory,
   Order,
   PaymentStatus,
   Session,
   ServiceSetup,
-  StaffMember,
+  RoleLabels,
+  StaffRole,
   TaxRate,
   Touchpoint,
   Venue,
@@ -19,7 +21,11 @@ export type Workspace = {
   touchpoints: Touchpoint[];
   orders: Order[];
   menu: MenuCategory[];
-  staff: StaffMember[];
+  staff: StoredStaff[];
+  /** Owner-edited role names. Missing roles use the defaults. */
+  roleLabels?: Partial<RoleLabels>;
+  /** Image URLs may be local photo refs (idb:), resolved when read. */
+  branding?: Branding;
   payment: PaymentStatus;
   taxes: TaxRate[];
   /** True until the sample menu is cleared, so the button stays available after edits. */
@@ -30,6 +36,18 @@ export type Workspace = {
   cloud?: { venueId: string; code: string; version: number; codeShown: boolean };
   /** A copy of someone else's venue, cached for a guest's cart. Never shown as a workspace. */
   guestOnly?: boolean;
+};
+
+/** A PIN is only ever kept as a hash. pinVersion goes up on a reset, which signs devices out. */
+export type StoredStaff = {
+  id: string;
+  name: string;
+  role: StaffRole;
+  active: boolean;
+  pinHash: string | null;
+  pinVersion: number;
+  /** The account owner from sign-up: can't be changed or deactivated here. */
+  accountOwner?: boolean;
 };
 
 export type StoredCartLine = {
@@ -47,7 +65,7 @@ export type DemoState = {
 };
 
 // Passwords are never kept. Bump the version when the shape of the state changes.
-const STORAGE_KEY = "tapflow:demo:v8";
+const STORAGE_KEY = "tapflow:demo:v9";
 
 function freshWorkspaces(): Workspace[] {
   return [demoBrewery(), demoFoodTruck()];

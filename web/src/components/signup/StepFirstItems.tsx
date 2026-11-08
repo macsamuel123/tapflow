@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo } from "react";
+import { ImageUpload } from "@/components/ImageUpload";
 import { AllergenPicker } from "@/components/menu-builder/AllergenPicker";
 import { CategoryField } from "@/components/menu-builder/CategoryField";
-import { CsvImporter } from "@/components/menu-builder/CsvImporter";
 import { Button, Card, SelectField, TextField } from "@/components/ui";
 import { allergenChoiceError } from "@/lib/menu/allergens";
 import { parseDollars } from "@/lib/menu/price";
-import { categoryNameError, itemNameError, menuKey, priceError } from "@/lib/menu/rules";
-import type { AllergenId, DuplicateMode, ImportResult, MenuImportRow, TaxCategory } from "@/services/types";
+import { categoryNameError, descriptionError, itemNameError, MAX_DESCRIPTION, priceError } from "@/lib/menu/rules";
+import type { AllergenId, MenuImportRow, SignUpInput, TaxCategory } from "@/services/types";
 
 export type QuickItem = {
   id: string;
   name: string;
+  description: string;
   price: string;
   category: string;
   taxCategory: TaxCategory;
@@ -20,10 +21,14 @@ export type QuickItem = {
   noAllergens: boolean;
 };
 
+/** Photos stay in memory, keyed by QuickItem.id: blobs can't go in session storage. */
+export type QuickPhotos = Record<string, Blob>;
+
 export function blankQuickItem(category = ""): QuickItem {
   return {
     id: crypto.randomUUID(),
     name: "",
+    description: "",
     price: "",
     category,
     taxCategory: "Food",
@@ -39,6 +44,7 @@ export function isBlankQuickItem(item: QuickItem): boolean {
 function quickErrors(item: QuickItem) {
   return {
     name: itemNameError(item.name),
+    description: descriptionError(item.description),
     price: priceError(item.price),
     category: categoryNameError(item.category),
     allergens: allergenChoiceError(item.allergens, item.noAllergens),
@@ -57,122 +63,139 @@ export function quickRows(items: QuickItem[]): MenuImportRow[] {
       name: item.name.trim(),
       priceCents: parseDollars(item.price) ?? 0,
       taxCategory: item.taxCategory,
-      description: null,
+      description: item.description.trim() || null,
       soldOut: null,
       allergens: item.allergens,
       otherAllergens: "",
     }));
 }
 
-function mergeRows(current: MenuImportRow[], rows: MenuImportRow[], mode: DuplicateMode) {
-  const merged = new Map(current.map((row) => [menuKey(row.category, row.name), row]));
-  const result: ImportResult = { imported: 0, updated: 0, skipped: 0 };
-  for (const row of rows) {
-    const key = menuKey(row.category, row.name);
-    if (!merged.has(key)) result.imported += 1;
-    else if (mode === "skip") {
-      result.skipped += 1;
-      continue;
-    } else result.updated += 1;
-    merged.set(key, row);
-  }
-  return { rows: [...merged.values()], result };
+export function quickPhotos(items: QuickItem[], photos: QuickPhotos): SignUpInput["menuPhotos"] {
+  return items.flatMap((item) => {
+    const photo = photos[item.id];
+    return photo && !isBlankQuickItem(item) ? [{ category: item.category.trim(), name: item.name.trim(), photo }] : [];
+  });
+}
+
+function usePreviews(photos: QuickPhotos): Record<string, string> {
+  const previews = useMemo(
+    () => Object.fromEntries(Object.entries(photos).map(([id, blob]) => [id, URL.createObjectURL(blob)])),
+    [photos],
+  );
+  useEffect(() => () => Object.values(previews).forEach((url) => URL.revokeObjectURL(url)), [previews]);
+  return previews;
 }
 
 export function StepFirstItems({
   quickItems,
-  csvRows,
-  currency,
+  photos,
   showErrors,
   onQuickItems,
-  onCsvRows,
+  onPhotos,
 }: {
   quickItems: QuickItem[];
-  csvRows: MenuImportRow[];
-  currency: string;
+  photos: QuickPhotos;
   showErrors: boolean;
   onQuickItems: (items: QuickItem[]) => void;
-  onCsvRows: (rows: MenuImportRow[]) => void;
+  onPhotos: (photos: QuickPhotos) => void;
 }) {
-  const [importing, setImporting] = useState(false);
-  const categories = [
-    ...new Set([...csvRows.map((r) => r.category), ...quickItems.map((q) => q.category.trim())].filter(Boolean)),
-  ];
-  const keys = new Set(csvRows.map((row) => menuKey(row.category, row.name)));
+  const categories = [...new Set(quickItems.map((q) => q.category.trim()).filter(Boolean))];
+  const previews = usePreviews(photos);
 
   function setItem(id: string, change: Partial<QuickItem>) {
     onQuickItems(quickItems.map((q) => (q.id === id ? { ...q, ...change } : q)));
+  }
+
+  function setPhoto(id: string, photo: Blob | null) {
+    const next = { ...photos };
+    if (photo) next[id] = photo;
+    else delete next[id];
+    onPhotos(next);
   }
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-black text-ink">Add your first items</h1>
-        <p className="mt-1 text-gray-600">Optional. You can add more later, with photos and options.</p>
+        <p className="mt-1 text-gray-600">
+          Optional. Add a few items one at a time. You can import a CSV from the Menu page later.
+        </p>
       </div>
 
       {quickItems.map((item, i) => {
         const errors = showErrors && !isBlankQuickItem(item) ? quickErrors(item) : null;
+        const n = i + 1;
         return (
           <Card key={item.id} className="space-y-3">
-            <h2 className="text-sm font-semibold text-ink">Item {i + 1}</h2>
-            <TextField label={`Item ${i + 1} name`} maxLength={100} value={item.name} error={errors?.name} onChange={(e) => setItem(item.id, { name: e.target.value })} />
+            <h2 className="text-sm font-semibold text-ink">Item {n}</h2>
+            <TextField label={`Item ${n} name`} maxLength={100} value={item.name} error={errors?.name} onChange={(e) => setItem(item.id, { name: e.target.value })} />
+            <label className="block">
+              <span className="text-sm font-medium text-ink">Item {n} description</span>
+              <textarea
+                className="mt-1 block min-h-20 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-base text-ink focus-visible:outline-2 focus-visible:outline-brand-700"
+                maxLength={MAX_DESCRIPTION + 20}
+                placeholder="Optional"
+                value={item.description}
+                onChange={(e) => setItem(item.id, { description: e.target.value })}
+              />
+              {errors?.description ? (
+                <span role="alert" className="mt-1 block text-sm font-medium text-red-700">{errors.description}</span>
+              ) : null}
+            </label>
             <div className="grid grid-cols-2 gap-3">
-              <TextField label={`Item ${i + 1} price`} inputMode="decimal" placeholder="12.50" value={item.price} error={errors?.price} onChange={(e) => setItem(item.id, { price: e.target.value })} />
-              <SelectField label={`Item ${i + 1} tax type`} value={item.taxCategory} onChange={(e) => setItem(item.id, { taxCategory: e.target.value as TaxCategory })}>
+              <TextField label={`Item ${n} price`} inputMode="decimal" placeholder="12.50" value={item.price} error={errors?.price} onChange={(e) => setItem(item.id, { price: e.target.value })} />
+              <SelectField label={`Item ${n} tax type`} value={item.taxCategory} onChange={(e) => setItem(item.id, { taxCategory: e.target.value as TaxCategory })}>
                 <option value="Food">Food</option>
                 <option value="Alcohol">Alcohol</option>
               </SelectField>
             </div>
             <CategoryField
               categories={categories}
-              aria-label={`Item ${i + 1} category`}
+              aria-label={`Item ${n} category`}
               value={item.category}
               error={errors?.category}
               onChange={(e) => setItem(item.id, { category: e.target.value })}
             />
             <AllergenPicker
-              legend={`Item ${i + 1} allergens`}
+              legend={`Item ${n} allergens`}
               allergens={item.allergens}
               noAllergens={item.noAllergens}
               error={errors?.allergens}
               onChange={(choice) => setItem(item.id, choice)}
             />
+            <section className="space-y-1">
+              <h3 className="text-sm font-medium text-ink">Photo (optional)</h3>
+              <ImageUpload
+                name="photo"
+                inputLabel={`Item ${n} photo`}
+                previewUrl={previews[item.id] ?? null}
+                previewClassName="h-24 w-24 rounded-xl object-cover"
+                onChoose={(photo) => setPhoto(item.id, photo)}
+                onRemove={() => setPhoto(item.id, null)}
+              />
+            </section>
             {quickItems.length > 1 ? (
-              <Button variant="ghost" onClick={() => onQuickItems(quickItems.filter((q) => q.id !== item.id))}>Remove item {i + 1}</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPhoto(item.id, null);
+                  onQuickItems(quickItems.filter((q) => q.id !== item.id));
+                }}
+              >
+                Remove item {n}
+              </Button>
             ) : null}
           </Card>
         );
       })}
 
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => onQuickItems([...quickItems, blankQuickItem(quickItems.at(-1)?.category ?? "")])}
-        >
-          Add another item
-        </Button>
-        <Button variant="secondary" onClick={() => setImporting(true)}>Upload CSV</Button>
-      </div>
-
-      {csvRows.length > 0 ? (
-        <p role="status" className="rounded-xl bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-800">
-          {csvRows.length} {csvRows.length === 1 ? "item" : "items"} from your CSV will be added.
-        </p>
-      ) : null}
-
-      {importing ? (
-        <CsvImporter
-          existingKeys={keys}
-          currency={currency}
-          onImport={async (rows, mode) => {
-            const merged = mergeRows(csvRows, rows, mode);
-            onCsvRows(merged.rows);
-            return merged.result;
-          }}
-          onClose={() => setImporting(false)}
-        />
-      ) : null}
+      <Button
+        variant="secondary"
+        className="w-full"
+        onClick={() => onQuickItems([...quickItems, blankQuickItem(quickItems.at(-1)?.category ?? "")])}
+      >
+        Add another item
+      </Button>
     </div>
   );
 }

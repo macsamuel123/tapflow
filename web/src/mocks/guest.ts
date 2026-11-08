@@ -5,6 +5,7 @@ import { quote, type PricingLine } from "@/lib/pricing";
 import { cleanGuestName, MAX_GUEST_NAME } from "@/lib/guest";
 import { ServiceError } from "@/services/types";
 import type {
+  Branding,
   GuestAccess,
   GuestContext,
   GuestService,
@@ -40,6 +41,15 @@ export async function withPhotoUrls(menu: MenuCategory[]): Promise<MenuCategory[
       ),
     })),
   );
+}
+
+/** Image refs become URLs, as they will from the API. */
+export async function resolveBranding(branding: Branding | undefined): Promise<Branding> {
+  return {
+    logoUrl: await photoUrl(branding?.logoUrl ?? null),
+    coverUrl: await photoUrl(branding?.coverUrl ?? null),
+    color: branding?.color ?? null,
+  };
 }
 
 type Located = { workspace: Workspace; touchpoint: Touchpoint };
@@ -217,6 +227,7 @@ export const guestService: GuestService = {
       serviceMode: touchpoint.serviceMode,
       access: access(touchpoint, context.token),
       localOnly: workspace.id === YOUR_VENUE_ID && !workspace.cloud,
+      branding: await resolveBranding(workspace.branding),
     };
     return venue;
   },

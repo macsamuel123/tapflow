@@ -184,7 +184,7 @@ export function ModifierSheet({ item, currency, onClose, onAdd }: Props) {
               type="button"
               onClick={submit}
               disabled={submitting}
-              className="flex-1 rounded-lg bg-gray-900 px-4 py-3 font-medium text-white disabled:opacity-60"
+              className="brand-button flex-1 rounded-lg px-4 py-3 font-medium disabled:opacity-60"
             >
               {submitting ? "Adding…" : `Add to cart · ${formatCents(preview, currency)}`}
             </button>

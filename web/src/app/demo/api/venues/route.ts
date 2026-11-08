@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { DEMO_CLOUD, VENUES_PER_DAY } from "@/lib/demo-cloud/config";
 import { clientKey, databaseError, jsonError, readJson } from "@/lib/demo-cloud/server";
 import { cleanMenu, cleanTouchpoints, db, hashCode, loadSnapshot, newRecoveryCode } from "@/lib/demo-cloud/venues";
+import { hashPin } from "@/lib/demo-cloud/staff";
+import { SAMPLE_TEAM } from "@/lib/staff/sample-team";
 import { slugify } from "@/mocks/fixtures";
 
 const COUNTRIES = ["CA", "US"];
@@ -18,6 +20,12 @@ export async function POST(request: NextRequest) {
   const points = cleanTouchpoints(body.touchpoints, []);
   if (points.problem !== undefined) return jsonError(422, points.problem);
 
+  const industry = String(body.industry ?? "").slice(0, 40);
+  const venueType = typeof body.venueType === "string" ? body.venueType.trim() : "";
+  if (industry === "other" && (!venueType || venueType.length > 40)) {
+    return jsonError(422, "Enter your venue type in 40 characters or fewer.");
+  }
+
   const code = newRecoveryCode();
   const { data, error } = await db().rpc("create_venue", {
     p_ip: clientKey(request),
@@ -25,7 +33,8 @@ export async function POST(request: NextRequest) {
     p_venue: {
       slug: slugify(name),
       name,
-      industry: String(body.industry ?? "").slice(0, 40),
+      industry,
+      venue_type: industry === "other" ? venueType : null,
       country: body.country,
       region: String(body.region ?? "").slice(0, 60),
       currency: body.country === "US" ? "USD" : "CAD",
@@ -40,6 +49,15 @@ export async function POST(request: NextRequest) {
       ? jsonError(429, `You've reached the limit of ${VENUES_PER_DAY} new venues a day.`)
       : databaseError(error.message);
   }
-  const snapshot = await loadSnapshot((data as { id: string }).id);
+  const venueId = (data as { id: string }).id;
+  // The same sample team a same-browser venue starts with, so staff mode can be tried at once.
+  for (const member of SAMPLE_TEAM) {
+    await db().rpc("save_staff", {
+      p_venue: venueId,
+      p_key_hash: hashCode(code),
+      p_op: { op: "add", name: member.name, role: member.role, pin_hash: member.pin ? hashPin(venueId, member.pin) : null },
+    });
+  }
+  const snapshot = await loadSnapshot(venueId);
   return NextResponse.json({ code, snapshot }, { status: 201 });
 }

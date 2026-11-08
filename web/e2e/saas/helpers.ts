@@ -43,7 +43,7 @@ export async function logIn(page: Page) {
 /** Follows a bottom-nav link, opening the More menu first when the page lives there. */
 export async function openPage(page: Page, label: string, heading: string) {
   const nav = page.getByRole("navigation", { name: "Dashboard mobile" });
-  if (["Staff", "Payments", "Settings"].includes(label)) {
+  if (["Profile", "Staff", "Payments", "Settings"].includes(label)) {
     await nav.getByRole("button", { name: "More" }).click();
     await page.locator("#more-menu").getByRole("link", { name: label }).click();
   } else {
