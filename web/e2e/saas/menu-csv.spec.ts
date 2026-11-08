@@ -210,19 +210,23 @@ test.describe("sign-up", () => {
     await page.evaluate(() => localStorage.clear());
   });
 
-  test("@saas CSV in step 5 uses the same importer", async ({ page }) => {
+  // M6: onboarding is per-item only. CSV import lives on the Menu page, with the same importer.
+  test("@saas step 5 has no CSV, and the Menu page imports the same file after sign-up", async ({ page }) => {
     await reachSetupStep(page, "breweries", "Harbour Taproom");
     await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("heading", { name: "Add your first items" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload CSV" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Skip for now" }).click();
+    await page.getByRole("link", { name: "Continue to dashboard" }).click();
+    await openPage(page, "Menu", "Menu");
+    await page.getByRole("button", { name: "Clear sample menu" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Clear menu" }).click();
+
     const importer = await openImporter(page);
     await importer.getByLabel("Choose CSV file").setInputFiles(csvFile(FIVE_PLUS_TWO));
     await importer.getByRole("button", { name: "Import 5 items" }).click();
     await expect(importer.getByRole("status")).toHaveText("Imported 5 items, 2 skipped");
     await importer.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByText("5 items from your CSV will be added.")).toBeVisible();
-
-    await page.getByRole("button", { name: "Create my QR codes" }).click();
-    await page.getByRole("link", { name: "Continue to dashboard" }).click();
-    await openPage(page, "Menu", "Menu");
     await expect(page.getByRole("button", { name: "Edit Fish tacos" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit Harbour Lager" })).toHaveCount(0);
   });

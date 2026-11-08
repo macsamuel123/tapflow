@@ -2,13 +2,15 @@ import Link from "next/link";
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 import { useId } from "react";
 
-type Variant = "primary" | "secondary" | "danger" | "ghost";
+type Variant = "primary" | "secondary" | "danger" | "ghost" | "brand";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-brand-700 text-white hover:bg-brand-800",
   secondary: "border border-gray-300 bg-white text-ink hover:bg-gray-50",
   danger: "border border-red-300 bg-white text-red-700 hover:bg-red-50",
   ghost: "text-brand-700 hover:bg-brand-50",
+  /** Guest pages: the venue's colour, from the --brand variables. */
+  brand: "brand-button",
 };
 
 const BUTTON =
@@ -109,7 +111,8 @@ export function YesNo({
 }: {
   legend: string;
   name: string;
-  value: boolean;
+  /** Null shows neither answer chosen. */
+  value: boolean | null;
   onChange: (value: boolean) => void;
 }) {
   return (

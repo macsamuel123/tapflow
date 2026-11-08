@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { ServiceSetupFields, type SetupForm } from "@/components/setup/ServiceSetupFields";
+import { ServiceSetupFields, toServiceSetup, type SetupForm } from "@/components/setup/ServiceSetupFields";
 import { Button, Card, FormError, LinkButton, SelectField, TextField } from "@/components/ui";
 import { DEMO_CLOUD, READ_ONLY_NOTE } from "@/lib/demo-cloud/config";
 import { formatBps } from "@/lib/percent";
@@ -74,7 +74,7 @@ function ServiceSetupCard({ initial }: { initial: SetupForm }) {
     setSaveError(null);
     if (Object.keys(found).length > 0) return;
     try {
-      await getServices().touchpoints.applySetup({ ...form, spotCount: parseSpotCount(form.spotCount) ?? 0 });
+      await getServices().touchpoints.applySetup(toServiceSetup(form, parseSpotCount(form.spotCount) ?? 0));
       setSaved("Saved. Touchpoints are updated.");
     } catch (err) {
       setSaveError(err instanceof ServiceError ? err.message : "Something went wrong. Try again.");
