@@ -21,6 +21,7 @@ def _out(session: DinerSession) -> SessionResponse:
         touchpoint_kind=session.touchpoint_kind,
         verified=session.verified,
         expires_at=session.expires_at,
+        service_mode=session.service_mode,
     )
 
 

@@ -203,14 +203,14 @@ isOneToOne: false
                   ]
                 },"orders": {
                   Row: {
-                    "accepted_at": string | null,"cancelled_at": string | null,"created_at": string,"currency": string,"delivered_at": string | null,"id": string,"paid_at": string | null,"ready_at": string | null,"session_id": string | null,"status": Database["public"]['Enums']["order_status"],"status_updated_at": string,"subtotal_cents": number,"tax_cents": number,"ticket_date": string | null,"ticket_number": number | null,"tip_cents": number,"total_cents": number,"touchpoint_id": string,"updated_at": string,"venue_id": string
+                    "accepted_at": string | null,"cancelled_at": string | null,"created_at": string,"currency": string,"delivered_at": string | null,"guest_name": string | null,"id": string,"paid_at": string | null,"picked_up_at": string | null,"ready_at": string | null,"service_mode": Database["public"]['Enums']["service_mode"],"session_id": string | null,"status": Database["public"]['Enums']["order_status"],"status_updated_at": string,"subtotal_cents": number,"tax_cents": number,"ticket_date": string | null,"ticket_number": number | null,"tip_cents": number,"total_cents": number,"touchpoint_id": string,"updated_at": string,"venue_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "accepted_at"?: string | null,"cancelled_at"?: string | null,"created_at"?: string,"currency": string,"delivered_at"?: string | null,"id"?: string,"paid_at"?: string | null,"ready_at"?: string | null,"session_id"?: string | null,"status"?: Database["public"]['Enums']["order_status"],"status_updated_at"?: string,"subtotal_cents": number,"tax_cents": number,"ticket_date"?: string | null,"ticket_number"?: number | null,"tip_cents"?: number,"total_cents": number,"touchpoint_id": string,"updated_at"?: string,"venue_id": string
+                    "accepted_at"?: string | null,"cancelled_at"?: string | null,"created_at"?: string,"currency": string,"delivered_at"?: string | null,"guest_name"?: string | null,"id"?: string,"paid_at"?: string | null,"picked_up_at"?: string | null,"ready_at"?: string | null,"service_mode"?: Database["public"]['Enums']["service_mode"],"session_id"?: string | null,"status"?: Database["public"]['Enums']["order_status"],"status_updated_at"?: string,"subtotal_cents": number,"tax_cents": number,"ticket_date"?: string | null,"ticket_number"?: number | null,"tip_cents"?: number,"total_cents": number,"touchpoint_id": string,"updated_at"?: string,"venue_id": string
                   }
                   Update: {
-                    "accepted_at"?: string | null,"cancelled_at"?: string | null,"created_at"?: string,"currency"?: string,"delivered_at"?: string | null,"id"?: string,"paid_at"?: string | null,"ready_at"?: string | null,"session_id"?: string | null,"status"?: Database["public"]['Enums']["order_status"],"status_updated_at"?: string,"subtotal_cents"?: number,"tax_cents"?: number,"ticket_date"?: string | null,"ticket_number"?: number | null,"tip_cents"?: number,"total_cents"?: number,"touchpoint_id"?: string,"updated_at"?: string,"venue_id"?: string
+                    "accepted_at"?: string | null,"cancelled_at"?: string | null,"created_at"?: string,"currency"?: string,"delivered_at"?: string | null,"guest_name"?: string | null,"id"?: string,"paid_at"?: string | null,"picked_up_at"?: string | null,"ready_at"?: string | null,"service_mode"?: Database["public"]['Enums']["service_mode"],"session_id"?: string | null,"status"?: Database["public"]['Enums']["order_status"],"status_updated_at"?: string,"subtotal_cents"?: number,"tax_cents"?: number,"ticket_date"?: string | null,"ticket_number"?: number | null,"tip_cents"?: number,"total_cents"?: number,"touchpoint_id"?: string,"updated_at"?: string,"venue_id"?: string
                   }
                   Relationships: [
                     {
@@ -395,14 +395,14 @@ isOneToOne: false
                   ]
                 },"touchpoints": {
                   Row: {
-                    "active": boolean,"created_at": string,"id": string,"kind": Database["public"]['Enums']["touchpoint_kind"],"label": string,"qr_secret": string,"updated_at": string,"venue_id": string
+                    "active": boolean,"created_at": string,"id": string,"kind": Database["public"]['Enums']["touchpoint_kind"],"label": string,"qr_secret": string,"service_mode": Database["public"]['Enums']["service_mode"],"updated_at": string,"venue_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "active"?: boolean,"created_at"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["touchpoint_kind"],"label": string,"qr_secret"?: string,"updated_at"?: string,"venue_id": string
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["touchpoint_kind"],"label": string,"qr_secret"?: string,"service_mode"?: Database["public"]['Enums']["service_mode"],"updated_at"?: string,"venue_id": string
                   }
                   Update: {
-                    "active"?: boolean,"created_at"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["touchpoint_kind"],"label"?: string,"qr_secret"?: string,"updated_at"?: string,"venue_id"?: string
+                    "active"?: boolean,"created_at"?: string,"id"?: string,"kind"?: Database["public"]['Enums']["touchpoint_kind"],"label"?: string,"qr_secret"?: string,"service_mode"?: Database["public"]['Enums']["service_mode"],"updated_at"?: string,"venue_id"?: string
                   }
                   Relationships: [
                     {
@@ -456,7 +456,7 @@ isOneToOne: true
             [_ in never]: never
           }
           Enums: {
-            "order_status": "pending_payment"|"paid"|"accepted"|"ready"|"delivered"|"cancelled","staff_role": "owner"|"manager"|"fulfillment"|"runner","touchpoint_kind": "table"|"seat"|"lounger"|"cart"|"room"|"counter"|"other"
+            "order_status": "pending_payment"|"paid"|"accepted"|"ready"|"delivered"|"picked_up"|"cancelled","service_mode": "delivery"|"pickup","staff_role": "owner"|"manager"|"fulfillment"|"runner","touchpoint_kind": "table"|"seat"|"lounger"|"cart"|"room"|"counter"|"other"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -572,7 +572,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "order_status": ["pending_payment", "paid", "accepted", "ready", "delivered", "cancelled"],"staff_role": ["owner", "manager", "fulfillment", "runner"],"touchpoint_kind": ["table", "seat", "lounger", "cart", "room", "counter", "other"]
+            "order_status": ["pending_payment", "paid", "accepted", "ready", "delivered", "picked_up", "cancelled"],"service_mode": ["delivery", "pickup"],"staff_role": ["owner", "manager", "fulfillment", "runner"],"touchpoint_kind": ["table", "seat", "lounger", "cart", "room", "counter", "other"]
           }
         }
 } as const

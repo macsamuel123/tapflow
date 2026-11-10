@@ -78,10 +78,13 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 | `staff_members` PK `(user_id, venue_id)`, role `owner \| manager \| fulfillment \| runner` | A user can work at several venues, with one role per venue. |
 | `platform_admins(user_id)` | The TapFlow team. Separate from venue roles, with read-only RLS across venues. Rows are managed outside the app. |
 | `venue_payment_settings` (platform fee, Stripe account, charges enabled) and `order_payments` (platform fee, PaymentIntent id) | All staff share the `authenticated` Postgres role, so column grants can't separate owners from managers. Payment data lives in its own tables with owner-only policies. A trigger creates the settings row for every venue. M3 checkout must keep `platform_fee_cents <= total_cents`, because a check can't span tables. |
-| `order_status` enum: `pending_payment \| paid \| accepted \| ready \| delivered \| cancelled` | Delivery workflow |
-| `orders` timestamps: `paid_at`, `accepted_at`, `ready_at`, `delivered_at`, `cancelled_at`, plus `status_updated_at` | Fulfillment and service timing |
+| `order_status` enum: `pending_payment \| paid \| accepted \| ready \| delivered \| picked_up \| cancelled` | Delivery and pickup workflows. `delivered` only on delivery orders, `picked_up` only on pickup orders (CHECKs + guard). |
+| `service_mode` enum `delivery \| pickup`: `touchpoints.service_mode` (default `delivery`, readable by staff) and `orders.service_mode`, a snapshot taken at checkout that never changes | The order keeps its mode if a touchpoint is reconfigured; the guard and `app.can_read_order` need no join. |
+| `orders.guest_name` (1–40 chars, required when `service_mode = 'pickup'`) | The name called at the pickup counter. Not financial. |
+| Partial unique index `orders(session_id) where status = 'pending_payment'` | At most one checkout in flight per session; re-checkout replaces or reuses it (M7). |
+| `orders` timestamps: `paid_at`, `accepted_at`, `ready_at`, `delivered_at`, `picked_up_at`, `cancelled_at`, plus `status_updated_at` | Fulfillment and service timing |
 | `orders.ticket_number` + `ticket_date`; touchpoint `ticket_counters(venue_id, local_date, last_number)` | Short ticket numbers that **reset daily per venue (venue-local date)**. Assigned atomically at *paid* via `app.next_ticket_number()`. Unique index on `(venue_id, ticket_date, ticket_number)`. |
-| `orders.currency`, `tip_cents` default 0 | Currency snapshot; tips are reserved |
+| `orders.currency`, `tip_cents` default 0 | Currency snapshot; the diner's tip (M7: 0..subtotal, never taxed) |
 | `order_items.name_snapshot`, `unit_price_cents`, `modifiers_snapshot` = `[{id,name,price_delta_cents}]` | Immutable receipt |
 | `touchpoints.qr_secret` not readable by `anon`/`authenticated` (column grants) | The secret never leaves the server |
 | CHECKs: all `*_cents >= 0`, `quantity BETWEEN 1 AND 20`, `0 <= min_select <= max_select`, bps 0–10000 | The DB backs up the invariants |
@@ -94,8 +97,8 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 |---|---|---|
 | Owner | Every paid order of the venue | Yes |
 | Manager | Every paid order of the venue, including history | No |
-| Fulfillment | `paid`, `accepted`, `ready`, plus orders delivered or cancelled today (venue local time) | No |
-| Runner | `ready` only | No |
+| Fulfillment | `paid`, `accepted`, `ready`, plus orders delivered, picked up or cancelled today (venue local time) | No |
+| Runner | `ready` delivery orders only (pickup orders are collected, not run) | No |
 | Platform admin | Every order of every venue, including `pending_payment` and abandoned checkouts | Yes, read-only |
 
 - Venue staff never see an unpaid order. The rule tests `paid_at`, not status, so a checkout that re-checkout cancelled stays hidden too.
@@ -132,11 +135,11 @@ Touchpoints: `venues`, `staff_members`, `touchpoints`, `tax_categories`, `taxes`
 
 **Order status machine** (`domain/order_status.py`, server-validated):
 ```
-pending_payment ──(webhook only)──▶ paid ──▶ accepted ──▶ ready ──▶ delivered
-                                     │          │
+pending_payment ──(webhook only)──▶ paid ──▶ accepted ──▶ ready ──▶ delivered   (delivery orders)
+                                     │          │            └────▶ picked_up   (pickup orders)
                                      └──────────┴──▶ cancelled
 ```
-Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `cancelled_at`). Staff can never set `paid`; only the webhook can. Refunds for cancelled orders go through the Stripe Dashboard in the MVP.
+Each transition sets its timestamp (`accepted_at`, `ready_at`, `delivered_at`, `picked_up_at`, `cancelled_at`). Runners may only set `delivered`. Staff can never set `paid`; only the webhook can. Refunds for cancelled orders go through the Stripe Dashboard in the MVP.
 
 **KDS** (`/kds/[slug]`), with three columns:
 
@@ -235,8 +238,9 @@ The repo lives at `~/code/restaurant_app` on the Linux filesystem.
 | S0.1 | Menu builder on the mock: sign-up step 5, categories, items, photos, options, allergens and CSV import (see §12) | Lint clean, `make test` passes, Playwright `@saas` at 390px |
 | S0.2 | Guest experience on the mock: scan, menu, cart, mock order and order status (see §12) | Lint clean, `make test` passes, Playwright `@saas`, a demo QR completes an order in a fresh browser |
 | S0.3 | Shared demo backend: guest phone to dashboard, live, on Supabase Cloud with mock payments (see §12) | Lint clean, `make test`, `make e2e-saas` and `make e2e-cloud` pass, verified on production with two browsers |
-| M3 | Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, pickup (see §12), tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
+| M3 | **Split (M7 did the backend).** Remaining UI half: KDS, diner status page, Connect onboarding, ExpressCheckout, `make tunnel`, Playwright `@order-flow`. Original scope — Pay + KDS + delivery: Connect onboarding, checkout, webhook, KDS (3 columns, alarm, runner view, polling fallback), 86ing, diner status page, pickup (see §12), tip selection, ExpressCheckout (Apple Pay / Google Pay), `make tunnel` | Playwright `@order-flow`: scan → pay → accept → ready → delivered |
 | M4 | Owner dashboard + polish: wire the S0.1 menu builder to the API, venue tax setup, touchpoints + printable QR sheet, Stripe status, order history, empty/error/loading states, Lighthouse, README + Mermaid + demo script | Lint, tests and Lighthouse reported |
+| M7 | Pay core API (backend half of M3): checkout, Stripe webhook, order status machine with pickup, staff order endpoints, against a fake Stripe gateway (see M7 below) | pgTAP `Result: PASS`; pytest covers the status matrix, checkout, re-checkout, webhook and staff endpoints; `make lint` clean |
 | M5 | Admin & Ops: `/admin` panel, tagged Playwright suites, `tests.yml` nightly and on demand, `/admin/ops` with run buttons, failure alerts, manual release checklist, staging smoke test (see §11) | A failing nightly run sends an alert and appears on `/admin/ops` with its report; each suite runs alone from a Run button |
 
 After each milestone: what was built, how to run and test it, what's stubbed, what's next, with lint and test summaries.

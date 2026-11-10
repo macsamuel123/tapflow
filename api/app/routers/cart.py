@@ -35,7 +35,7 @@ _RULE_STATUS = {
 }
 
 
-def _rule_http_error(err: CartRuleError) -> Exception:
+def rule_http_error(err: CartRuleError) -> Exception:
     code = _RULE_STATUS.get(err.code, status.HTTP_422_UNPROCESSABLE_CONTENT)
     return api_error(code, err.code.value, err.message)
 
@@ -56,7 +56,7 @@ def _validate(
             quantity=quantity,
         )
     except CartRuleError as err:
-        raise _rule_http_error(err) from err
+        raise rule_http_error(err) from err
 
 
 def _line_out(

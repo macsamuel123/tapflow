@@ -103,3 +103,7 @@ async def delete_line(conn: Conn, session_id: UUID, line_id: UUID) -> bool:
         "delete from public.cart_items where id = %s and session_id = %s", (line_id, session_id)
     )
     return cur.rowcount == 1
+
+
+async def clear(conn: Conn, session_id: UUID) -> None:
+    await conn.execute("delete from public.cart_items where session_id = %s", (session_id,))

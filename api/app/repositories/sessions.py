@@ -17,12 +17,15 @@ class DinerSession:
     touchpoint_kind: str | None
     verified: bool
     expires_at: datetime
+    # The touchpoint's mode; a session without a touchpoint browses only, as delivery.
+    service_mode: str
 
 
 _SELECT = """
 select s.id, s.venue_id, v.slug as venue_slug, s.touchpoint_id,
        t.label as touchpoint_label, t.kind::text as touchpoint_kind,
-       s.verified, s.expires_at
+       s.verified, s.expires_at,
+       coalesce(t.service_mode::text, 'delivery') as service_mode
 from public.touchpoint_sessions s
 join public.venues v on v.id = s.venue_id
 left join public.touchpoints t on t.id = s.touchpoint_id
@@ -54,4 +57,11 @@ async def get_active(conn: Conn, session_id: UUID) -> DinerSession | None:
 async def touch(conn: Conn, session_id: UUID) -> None:
     await conn.execute(
         "update public.touchpoint_sessions set last_seen_at = now() where id = %s", (session_id,)
+    )
+
+
+async def lock(conn: Conn, session_id: UUID) -> None:
+    """Serialize checkouts of one session (double taps, two tabs)."""
+    await conn.execute(
+        "select id from public.touchpoint_sessions where id = %s for update", (session_id,)
     )
