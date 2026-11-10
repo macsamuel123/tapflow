@@ -71,6 +71,10 @@ insert into public.touchpoints (id, venue_id, label, kind, qr_secret) values
   ('c0000000-0000-4000-8000-000000000004', 'b0000000-0000-4000-8000-000000000001', 'Table 4', 'table', 'dev-only-qr-secret-table-04'),
   ('c0000000-0000-4000-8000-000000000005', 'b0000000-0000-4000-8000-000000000001', 'Table 5', 'table', 'dev-only-qr-secret-table-05');
 
+-- A pickup counter: diners give a name and collect their order when its number is called.
+insert into public.touchpoints (id, venue_id, label, kind, service_mode, qr_secret) values
+  ('c0000000-0000-4000-8000-000000000006', 'b0000000-0000-4000-8000-000000000001', 'Pickup counter', 'counter', 'pickup', 'dev-only-qr-secret-table-06');
+
 -- ---------------------------------------------------------------- categories
 insert into public.menu_categories (id, venue_id, name, sort_order) values
   ('d0000000-0000-4000-8000-000000000001', 'b0000000-0000-4000-8000-000000000001', 'Starters', 1),
