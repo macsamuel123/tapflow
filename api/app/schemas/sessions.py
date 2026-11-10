@@ -23,6 +23,7 @@ class SessionResponse(Outbound):
     touchpoint_kind: str | None
     verified: bool
     expires_at: datetime
+    service_mode: str
 
 
 class CreateSessionResponse(SessionResponse):
