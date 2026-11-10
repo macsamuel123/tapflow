@@ -373,3 +373,45 @@ Covers the owner's "S0.5" request, built on the S0.4 cloud demo schema. It chang
 - [ ] M6-C4: **Staff screen and Staff mode UI.** Dashboard "Staff" lists staff and shows the permission matrix. The owner can add staff (name, role, then a 4-digit PIN for Cook, Bartender, Server, Runner and Host, or a copyable mock invite link for Owner and Manager with the note "Real email invites when accounts go live"). The owner can edit role, reset PIN, deactivate and rename a role's display name. `/staff/<slug>` shows a PIN pad, then only the views the role allows: Cook and Bartender see the fulfillment view, Server and Runner see "Ready to deliver", Host sees view-only orders and touchpoints. "Switch user" returns to the PIN pad. A cloud Playwright spec on a second browser context covers: Cook PIN → mark Ready, with no Delivered control; Server PIN → sees Ready orders and marks Delivered; 5 wrong PINs → lock message.
 - [ ] M6-C5: **Rename propagation.** Renaming Cook to "Chef" shows "Chef" in the Staff list, the permission matrix, the staff-mode header and the PIN-pad role label, covered by a Playwright assertion in the cloud spec. Wording stays venue-generic, and role names stay labels only.
 - [ ] M6-C6: **Docs and gates.** PLAN.md gets an M6 row and §12 notes. They say real accounts and email invites replace the mock in M4, and that the `staff_role` enum plan becomes `owner | manager | fulfillment | bartender | server | runner | host`, with Cook as the display label for `fulfillment`. CLAUDE.md invariant 5 is updated to match. `make lint` (including `tsc`), `make test`, `make e2e-saas` and `make e2e-cloud` all pass with no regressions. The SQL to run (`004_*.sql` via `supabase db query --linked -f`) is listed in the PR description.
+
+## M7: Pay core API (checkout, webhook, order status machine, pickup)
+ui: false
+This is the backend half of PLAN.md M3, built and tested against a fake Stripe client with no real keys. Out of scope for M7: the KDS UI, the diner status page, Connect onboarding, ExpressCheckout, `make tunnel`, and the Playwright `@order-flow` spec. Those are the next milestone. The `demo` schema is untouched.
+- [ ] M7-C1: **Schema.** A new append-only migration in `supabase/migrations/` adds the following (each only if missing):
+  - `touchpoints.service_mode` (`delivery|pickup`);
+  - `orders.guest_name`, `orders.tip_cents` and the `picked_up` status;
+  - `order_tax_lines`;
+  - `stripe_events`;
+  - the `ticket_counters` use for pickup numbers.
+
+  The migration also does three things:
+  - a status guard allows `picked_up` only from `ready` on a pickup order;
+  - `app.can_read_order` hides `ready` pickup orders from runners;
+  - fulfillment's "closed today" rule includes `picked_up`.
+
+  pgTAP cases cover all three and `make test-db` reports `Result: PASS`. Existing RLS tests still pass.
+- [ ] M7-C2: **Status machine.** `api/app/domain/order_status.py` is covered by `api/tests/unit/test_order_status.py`.
+  - It tests every from→to pair for both delivery and pickup orders, including `picked_up` valid only on pickup and `delivered` only on delivery.
+  - `cancelled` is allowed only from `paid` or `accepted`.
+  - Staff can never set `paid`.
+  - Each transition returns its timestamp field.
+- [ ] M7-C3: **Checkout.** `POST /checkout` (Pydantic `extra="forbid"`) requires a verified session, a non-empty cart, `stripe_charges_enabled` and a stock re-check.
+  - It creates a `pending_payment` order with item and tax snapshots, `order_tax_lines`, `platform_fee` and an untaxed `tip_cents`. All amounts are server-computed, and a client-sent total or price is rejected.
+  - `guest_name` is required at pickup touchpoints only.
+  - The PaymentIntent is created with `automatic_payment_methods`, `application_fee_amount`, `transfer_data.destination`, `metadata.order_id` and idempotency key = order id.
+  - Only `api/app/payments/` imports `stripe`, behind a Protocol with a fake for tests.
+  - The re-checkout matrix is tested: `requires_payment_method` and `requires_confirmation` cancel the old PaymentIntent and order and create new ones; `processing` and `succeeded` reuse and create nothing; any other status reuses.
+  - Tests are in `api/tests/unit` and `api/tests/integration/test_checkout.py`.
+- [ ] M7-C4: **Webhook.** `POST /webhooks/stripe` is tested in `api/tests/integration/test_webhooks.py`.
+  - It verifies the signature, and a bad signature returns 400.
+  - Events are inserted into `stripe_events` with `ON CONFLICT DO NOTHING`, so a replayed event is a 200 no-op.
+  - `payment_intent.succeeded` rejects an amount or currency mismatch.
+  - On a match it sets `paid`, `paid_at` and the daily `ticket_number`, and clears the cart. A unit test shows the counter resets across a venue-timezone boundary.
+  - `payment_failed` leaves the order pending.
+  - `account.updated` syncs `stripe_charges_enabled`.
+- [ ] M7-C5: **Staff order endpoints.** `GET /staff/orders` and `PATCH /staff/orders/{id}/status` are server-validated through the status machine.
+  - Integration tests show `pending_payment` orders are never returned to venue staff.
+  - A runner cannot move an order to `accepted` or `cancelled`.
+  - A cross-venue order id returns 404.
+  - An invalid transition returns 409.
+- [ ] M7-C6: **Docs and gates.** PLAN.md gets an M7 row noting that M3 is split, with the UI half remaining. CLAUDE.md invariant 4 is updated for `picked_up` and invariant 1 for the `guest_name` exception. `make lint` and `make test` pass with no regressions, and the output summary is reported.
